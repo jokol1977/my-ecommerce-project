@@ -1,0 +1,10 @@
+.git
+.next
+node_modules
+src/generated/prisma
+.env*
+backups
+coverage
+out
+*.log
+.vercel

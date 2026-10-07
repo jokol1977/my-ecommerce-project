@@ -1,0 +1,2 @@
+export const MAX_ORDER_TOTAL_TOMAN = 2_147_483_647;
+export const MIN_ORDER_TOTAL_TOMAN = 1_000;

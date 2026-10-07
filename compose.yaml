@@ -1,0 +1,100 @@
+services:
+  database:
+    image: postgres:17.11
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: janankadeh
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD}
+      MIGRATOR_DB_PASSWORD: ${MIGRATOR_DB_PASSWORD:?Set MIGRATOR_DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./db/init/01-create-app-role.sql:/docker-entrypoint-initdb.d/01-create-app-role.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d janankadeh"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 1m
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD}"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    image: janankadeh-app:local
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      AUTH_URL: ${AUTH_URL:?Set AUTH_URL to the HTTPS site origin}
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET}
+      DATABASE_URL: ${DATABASE_URL:?Set the janan_app DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:?Set the authenticated REDIS_URL}
+      RATE_LIMIT_SECRET: ${RATE_LIMIT_SECRET:?Set RATE_LIMIT_SECRET}
+      TRUSTED_PROXY: nginx
+      CRON_SECRET: ${CRON_SECRET:?Set CRON_SECRET}
+      SMTP_HOST: ${SMTP_HOST:?Set an Iranian SMTP host}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:?Set SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?Set SMTP_PASSWORD}
+      EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM}
+      ZARINPAL_MODE: ${ZARINPAL_MODE:-disabled}
+      ZARINPAL_MERCHANT_ID: ${ZARINPAL_MERCHANT_ID:-}
+      MARKETPLACE_LIVE_CHECKOUT_ENABLED: ${MARKETPLACE_LIVE_CHECKOUT_ENABLED:-false}
+      VENDOR_APPROVAL_ENABLED: ${VENDOR_APPROVAL_ENABLED:-false}
+      SMS_PROVIDER: ${SMS_PROVIDER:-disabled}
+      KAVENEGAR_API_KEY: ${KAVENEGAR_API_KEY:-}
+      KAVENEGAR_SENDER: ${KAVENEGAR_SENDER:-}
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  migrate:
+    image: janankadeh-migrator:local
+    build:
+      context: .
+      target: migrator
+    profiles: ["ops"]
+    environment:
+      DIRECT_URL: ${DIRECT_URL:?Set the janan_migrator DIRECT_URL}
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  postgres-data:
+  redis-data:
