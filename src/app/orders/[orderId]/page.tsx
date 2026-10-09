@@ -10,6 +10,7 @@ import DeliveryConfirmation from "./delivery-confirmation";
 import CancelOrder from "./cancel-order";
 import StartPayment from "./start-payment";
 import NewSupportCaseForm from "./new-support-case-form";
+import PaymentReceipt from "./payment-receipt";
 import { SUPPORT_CASE_ORDER_STATUSES } from "@/lib/support-cases";
 import { SUPPORT_CASE_CATEGORY_LABELS, SUPPORT_CASE_STATUS_LABELS } from "@/lib/support-case-labels";
 
@@ -40,6 +41,8 @@ export default async function OrderPage({ params, searchParams }: OrderPageProps
     select: {
       id: true,
       status: true,
+      subtotalToman: true,
+      shippingFeeToman: true,
       totalToman: true,
       createdAt: true,
       paymentExpiresAt: true,
@@ -71,6 +74,19 @@ export default async function OrderPage({ params, searchParams }: OrderPageProps
   });
   if (!order) notFound();
 
+  const [confirmedPayments, paymentSummary] = await Promise.all([
+    prisma.payment.findMany({
+      where: { orderId: order.id, status: "SUCCEEDED", verifiedAt: { not: null } },
+      orderBy: { verifiedAt: "desc" },
+      take: 10,
+      select: { provider: true, providerTransactionId: true, amountToman: true, verifiedAt: true },
+    }),
+    prisma.payment.aggregate({
+      where: { orderId: order.id, status: "SUCCEEDED", verifiedAt: { not: null } },
+      _sum: { amountToman: true },
+      _count: { _all: true },
+    }),
+  ]);
   const price = (amount: number) => new Intl.NumberFormat("fa-IR").format(amount);
   const dateTime = (value: Date) => new Intl.DateTimeFormat("fa-IR-u-ca-persian", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Tehran" }).format(value);
   const paymentAvailable = isPaymentAvailable();
@@ -125,6 +141,27 @@ export default async function OrderPage({ params, searchParams }: OrderPageProps
         </div>
 
         <p className="mt-6 flex justify-between border-t border-slate-100 pt-5 font-black"><span>مبلغ سفارش</span><span>{price(order.totalToman)} تومان</span></p>
+        {confirmedPayments.length > 0 && (
+          <PaymentReceipt
+            order={{
+              id: order.id,
+              createdAt: order.createdAt.toISOString(),
+              subtotalToman: order.subtotalToman,
+              shippingFeeToman: order.shippingFeeToman,
+              totalToman: order.totalToman,
+              vendorOrders: order.vendorOrders.map((vendorOrder) => ({
+                id: vendorOrder.id,
+                vendorName: vendorOrder.vendor.storeName,
+                items: vendorOrder.items,
+              })),
+            }}
+            payments={confirmedPayments.flatMap((payment) => payment.verifiedAt
+              ? [{ ...payment, verifiedAt: payment.verifiedAt.toISOString() }]
+              : [])}
+            capturedTotalToman={paymentSummary._sum.amountToman ?? 0}
+            confirmedPaymentCount={paymentSummary._count._all}
+          />
+        )}
         {order.status === "PAYMENT_REVIEW" && <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold leading-7 text-rose-900">پرداخت در زرین‌پال تأیید شده، اما سفارش به‌دلیل وضعیت موجودی یا تلاش پرداخت هم‌زمان متوقف شده است. مدیر باید سفارش یا بازپرداخت را بررسی کند؛ این سفارش به فروشنده ارسال نمی‌شود.</p>}
         {order.status === "PENDING_PAYMENT" && paymentAvailable && <StartPayment orderId={order.id} hasPendingPayment={hasPendingPayment} />}
         {order.status === "PENDING_PAYMENT" && !paymentAvailable && <p className="mt-5 rounded-xl bg-amber-50 p-4 text-sm leading-7 text-amber-900">{!liveCheckoutGateEnabled ? "پرداخت واقعی تا تکمیل فرآیندهای فروش، بازگشت وجه و تسویه فعال نمی‌شود." : "زرین‌پال در این محیط هنوز پیکربندی نشده است. در حالت توسعه سفارش محلی ثبت می‌شود، اما پرداخت انجام نمی‌گیرد."}{order.paymentExpiresAt && <> موجودی تا {new Intl.DateTimeFormat("fa-IR-u-ca-persian", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Tehran" }).format(order.paymentExpiresAt)} رزرو است.</>}</p>}

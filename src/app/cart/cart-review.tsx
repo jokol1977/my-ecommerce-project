@@ -20,7 +20,7 @@ type QuoteLine = {
   stockQuantity: number;
   available: boolean;
 };
-type Quote = { lines: QuoteLine[]; totalToman: number; totalExceedsLimit: boolean; canContinue: boolean };
+type Quote = { lines: QuoteLine[]; totalToman: number; totalExceedsLimit: boolean; canContinue: boolean; quotedAt: string };
 type DeliveryAddress = Omit<SavedAddress, "id" | "title">;
 const emptyAddress: DeliveryAddress = { recipient: "", phone: "", province: "", city: "", addressLine: "", postalCode: "" };
 
@@ -93,11 +93,11 @@ export default function CartReview({ isAuthenticated, savedAddresses, checkoutEn
       cache: "no-store",
     }).then(async (response) => {
       const data: unknown = await response.json();
-      if (!response.ok || typeof data !== "object" || data === null || !("lines" in data) || !("totalToman" in data) || !("totalExceedsLimit" in data) || !("canContinue" in data)) {
+      if (!response.ok || typeof data !== "object" || data === null || !("lines" in data) || !("totalToman" in data) || !("totalExceedsLimit" in data) || !("canContinue" in data) || !("quotedAt" in data)) {
         throw new Error("در حال حاضر بررسی قیمت و موجودی ممکن نیست.");
       }
       const value = data as Quote;
-      if (!Array.isArray(value.lines) || !Number.isSafeInteger(value.totalToman) || typeof value.totalExceedsLimit !== "boolean" || typeof value.canContinue !== "boolean") {
+      if (!Array.isArray(value.lines) || !Number.isSafeInteger(value.totalToman) || typeof value.totalExceedsLimit !== "boolean" || typeof value.canContinue !== "boolean" || typeof value.quotedAt !== "string" || !Number.isFinite(Date.parse(value.quotedAt))) {
         throw new Error("پاسخ بررسی سبد معتبر نیست.");
       }
       setQuote({ key, data: value });
@@ -202,6 +202,64 @@ export default function CartReview({ isAuthenticated, savedAddresses, checkoutEn
 
         {currentQuote && (
           <div className="mt-8 space-y-4">
+            <section id="cart-proforma" aria-labelledby="cart-proforma-title" className="print-document rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5">
+                <div>
+                  <p className="text-xs font-black tracking-wide text-emerald-800">جانان‌کده</p>
+                  <h2 id="cart-proforma-title" className="mt-2 text-xl font-black text-slate-900">پیش‌فاکتور موقت</h2>
+                  <p className="mt-1 text-sm text-slate-500">شناسه سفارش پس از ثبت سفارش صادر می‌شود.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-slate-500">
+                    زمان بررسی قیمت: <time dateTime={currentQuote.quotedAt}>{new Intl.DateTimeFormat("fa-IR-u-ca-persian", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tehran" }).format(new Date(currentQuote.quotedAt))}</time>
+                  </p>
+                  <button type="button" onClick={() => window.print()} className="print-hide min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50">چاپ پیش‌فاکتور</button>
+                  <button type="button" disabled={quoteLoading} onClick={() => {
+                    setQuote(null);
+                    setError(null);
+                    setRetry((value) => value + 1);
+                  }} className="print-hide min-h-10 rounded-lg bg-emerald-800 px-3 text-sm font-bold text-white hover:bg-emerald-900 disabled:opacity-50">بررسی دوباره قیمت</button>
+                </div>
+              </div>
+              <div className="mt-5 overflow-x-auto">
+                <table className="cart-proforma-table w-full min-w-[620px] text-right text-sm">
+                  <thead className="bg-slate-50 text-xs text-slate-600">
+                    <tr>
+                      <th scope="col" className="px-3 py-3 font-bold">کالا و فروشنده</th>
+                      <th scope="col" className="px-3 py-3 font-bold">تعداد</th>
+                      <th scope="col" className="px-3 py-3 font-bold">قیمت واحد</th>
+                      <th scope="col" className="px-3 py-3 font-bold">جمع ردیف</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {currentQuote.lines.map((line) => (
+                      <tr key={line.productId}>
+                        <th scope="row" className="px-3 py-3 font-bold text-slate-800">
+                          <span className="block">{line.name ?? "کالای ناموجود"}</span>
+                          <span className="mt-1 block text-xs font-normal text-slate-500">فروشنده: {line.vendorName ?? "—"}</span>
+                          {!line.available && <span className="mt-1 block text-xs font-bold text-rose-700">در حال حاضر قابل سفارش نیست</span>}
+                        </th>
+                        <td className="px-3 py-3 text-slate-700">{formatPrice(line.quantity)}</td>
+                        <td className="px-3 py-3 text-slate-700">{line.unitPriceToman === null ? "—" : formatPrice(line.unitPriceToman) + " تومان"}</td>
+                        <td className="px-3 py-3 font-bold text-slate-800">{line.lineTotalToman === null ? "—" : formatPrice(line.lineTotalToman) + " تومان"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <dl className="mt-5 space-y-3 border-t border-slate-200 pt-5 text-sm">
+                <div className="flex justify-between gap-4 text-slate-600"><dt>هزینه ارسال</dt><dd>در این نسخه محاسبه نمی‌شود</dd></div>
+                <div className="flex justify-between gap-4 text-slate-600"><dt>مالیات</dt><dd>در این نسخه محاسبه نمی‌شود</dd></div>
+                <div className="flex justify-between gap-4 border-t border-slate-100 pt-4 text-base font-black text-slate-900"><dt>جمع کالاهای قابل سفارش</dt><dd>{formatPrice(currentQuote.totalToman)} تومان</dd></div>
+              </dl>
+              <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs leading-6 text-amber-900">
+                این پیش‌فاکتور موقت و غیررسمی است. مبلغ بالا فقط جمع کالاهاست و شامل مالیات یا هزینه ارسال محاسبه‌شده نیست؛ بنابراین مبلغ نهایی پرداخت محسوب نمی‌شود. قیمت و موجودی هنگام ثبت سفارش دوباره در سرور بررسی می‌شود.
+              </p>
+            </section>
+            <div className="print-hide pt-2">
+              <h2 className="text-lg font-black text-slate-900">اقلام سبد خرید</h2>
+              <p className="mt-1 text-sm text-slate-600">تعداد را تغییر دهید یا کالا را حذف کنید؛ سپس پیش‌فاکتور را دوباره بررسی کنید.</p>
+            </div>
             {currentQuote.lines.map((line) => (
               <article key={line.productId} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4">
@@ -226,8 +284,8 @@ export default function CartReview({ isAuthenticated, savedAddresses, checkoutEn
               </article>
             ))}
             <section className="rounded-2xl bg-white p-5 shadow-sm">
-              <div className="flex justify-between font-black text-slate-900"><span>جمع کالاهای قابل سفارش</span><span>{formatPrice(currentQuote.totalToman)} تومان</span></div>
-              <p className="mt-3 text-xs leading-6 text-slate-500">این برآورد، سفارش یا پرداخت ایجاد نمی‌کند. در مرحلهٔ ثبت سفارش، سرور باید قیمت و موجودی را دوباره بررسی کند.</p>
+              <h2 className="text-lg font-black text-slate-900">ادامهٔ سفارش</h2>
+              <p className="mt-2 text-xs leading-6 text-slate-500">پیش از ایجاد سفارش، سرور قیمت و موجودی را دوباره بررسی می‌کند.</p>
               {quoteLoading && <p className="mt-3 text-sm text-slate-500">در حال بررسی سبد…</p>}
               {!currentQuote.canContinue && <p role="alert" className="mt-3 text-sm font-bold text-rose-700">{currentQuote.totalExceedsLimit ? "جمع سفارش از سقف مجاز فراتر است؛ تعداد یا اقلام سبد را کاهش دهید." : "برای ادامه، اقلام ناموجود یا بیش از حد موجودی را اصلاح کنید."}</p>}
               {belowPaymentMinimum && <p role="alert" className="mt-3 text-sm font-bold text-rose-700">حداقل مبلغ پرداخت زرین‌پال {formatPrice(MIN_ORDER_TOTAL_TOMAN)} تومان است؛ مبلغ سبد را افزایش دهید.</p>}

@@ -741,3 +741,48 @@ select:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-document,
+  .print-document * {
+    visibility: visible !important;
+  }
+
+  .print-document {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    border: 0 !important;
+    background: #fff !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    color: #111 !important;
+  }
+
+  .print-hide {
+    display: none !important;
+  }
+
+  .cart-proforma-table {
+    min-width: 0 !important;
+    border-collapse: collapse;
+  }
+
+  .cart-proforma-table th,
+  .cart-proforma-table td {
+    border: 1px solid #d1d5db;
+    padding: 8px;
+    color: #111 !important;
+  }
+}

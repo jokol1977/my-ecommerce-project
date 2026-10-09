@@ -139,6 +139,7 @@ export async function POST(request: Request) {
       totalToman,
       totalExceedsLimit,
       canContinue: lines.every((line) => line.available) && !totalExceedsLimit,
+      quotedAt: new Date().toISOString(),
     }, { headers });
   } catch (error) {
     console.error("Cart quote query failed.", error);

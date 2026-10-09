@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { requireActiveAdmin } from "@/lib/require-active-admin";
 import AdminNavigation from "@/app/admin/admin-navigation";
-import { hasUsableAuthSecret, hasUsableEmailConfig } from "@/lib/auth-config";
 import { hasUsableCronSecret } from "@/lib/cron-config";
 import { getZarinpalConfiguration } from "@/lib/zarinpal";
 import { isPaymentAvailable } from "@/lib/payment-config";
@@ -63,7 +62,7 @@ export default async function AdminReadinessPage() {
 
   const production = process.env.NODE_ENV === "production";
   const smsReady = isIranianSmsConfigured();
-  const authReady = Boolean(process.env.DATABASE_URL) && hasUsableAuthSecret() && hasUsableEmailConfig();
+  const authReady = false;
   const cronReady = hasUsableCronSecret();
   const checkoutFlagOpen = process.env.MARKETPLACE_LIVE_CHECKOUT_ENABLED === "true";
   const sellerFlagOpen = process.env.VENDOR_APPROVAL_ENABLED === "true";
@@ -115,8 +114,8 @@ export default async function AdminReadinessPage() {
           />
           <CheckCard
             title="ورود و احراز هویت پایه"
-            status={authReady ? "تنظیم شده" : "نیازمند تنظیم"}
-          detail="فقط وجود نشانی پایگاه داده و اعتبار ساختاریِ کلید و ایمیل بررسی می‌شود؛ مقدارها یا رمزها افشا نمی‌شوند."
+            status={authReady ? "تنظیم شده" : "غیرفعال موقت"}
+            detail="این انتشار فقط کاتالوگ عمومی را ارائه می‌کند؛ ورود کاربران و پنل‌های وابسته غیرفعال هستند."
             tone={authReady ? "good" : production ? "blocked" : "warning"}
           />
           <CheckCard

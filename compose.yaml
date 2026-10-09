@@ -53,12 +53,6 @@ services:
       RATE_LIMIT_SECRET: ${RATE_LIMIT_SECRET:?Set RATE_LIMIT_SECRET}
       TRUSTED_PROXY: nginx
       CRON_SECRET: ${CRON_SECRET:?Set CRON_SECRET}
-      SMTP_HOST: ${SMTP_HOST:?Set an Iranian SMTP host}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:?Set SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:?Set SMTP_PASSWORD}
-      EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM}
       ZARINPAL_MODE: ${ZARINPAL_MODE:-disabled}
       ZARINPAL_MERCHANT_ID: ${ZARINPAL_MERCHANT_ID:-}
       MARKETPLACE_LIVE_CHECKOUT_ENABLED: ${MARKETPLACE_LIVE_CHECKOUT_ENABLED:-false}
@@ -81,6 +75,25 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  order-expiry-scheduler:
+    image: janankadeh-app:local
+    command: ["node", "/app/order-expiry-scheduler.mjs"]
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      CRON_SECRET: ${CRON_SECRET:?Set CRON_SECRET}
+    depends_on:
+      web:
+        condition: service_healthy
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 128m
 
   migrate:
     image: janankadeh-migrator:local

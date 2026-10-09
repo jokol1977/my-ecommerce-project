@@ -117,8 +117,7 @@ Compose آمادگی سرویس برنامه را از مسیر بررسی دا�
    ```
 
 2. در `.env.production` همهٔ رمزهای نمونه را با رمزهای یکتای URL-safe عوض کنید. مقدار رمز در `DATABASE_URL` باید دقیقاً با `APP_DB_PASSWORD` و مقدار رمز در `DIRECT_URL` باید با `MIGRATOR_DB_PASSWORD` یکی باشد. `REDIS_URL` نیز باید از همان رمز `REDIS_PASSWORD` استفاده کند. برای `AUTH_SECRET`، `RATE_LIMIT_SECRET` و `CRON_SECRET` سه مقدار تصادفیِ جداگانه بسازید. نشانی `AUTH_URL` باید دامنهٔ اصلی با HTTPS باشد.
-
-3. نشانی‌های ایمیل را به SMTP متعلق به ارائه‌دهندهٔ داخل ایران یا سرور ایمیل خودتان وصل کنید. پورت ۵۸۷ با STARTTLS و پورت ۴۶۵ با TLS مستقیم پشتیبانی می‌شود. ورود ایمیلی تا زمانی که تنظیم SMTP معتبر نباشد در حالت آماده‌سازی می‌ماند.
+3. در این انتشار، ورود کاربران و پنل‌های مدیر و فروشنده موقتاً غیرفعال است؛ برای اجرای کاتالوگ عمومی نیازی به تنظیم SMTP نیست.
 
 4. فایل Compose را بررسی و تصویرها را بسازید:
 
@@ -132,7 +131,7 @@ Compose آمادگی سرویس برنامه را از مسیر بررسی دا�
    ```bash
    docker compose --env-file .env.production up -d database redis
    docker compose --profile ops --env-file .env.production run --rm migrate
-   docker compose --env-file .env.production up -d web
+   docker compose --env-file .env.production up -d web order-expiry-scheduler
    docker compose --env-file .env.production ps
    ```
 
@@ -142,10 +141,9 @@ Compose آمادگی سرویس برنامه را از مسیر بررسی دا�
 
 برای استفاده از Cloudflare، در شروع DNS-only ساده‌ترین مسیر است. اگر پراکسی Cloudflare را روشن می‌کنید، پیش از آن Nginx باید فقط رنج‌های IP رسمی Cloudflare را به‌عنوان پراکسی مورداعتماد بشناسد و IP کاربر را از هدر رسمی Cloudflare بازسازی کند؛ در غیر این صورت محدودسازی برنامه IP سرور Cloudflare را خواهد دید. هرگز هدر IP را از همهٔ فرستنده‌ها قابل‌اعتماد فرض نکنید. محافظت در برابر حملهٔ حجمی نیز به ظرفیت شبکه و فایروال ارائه‌دهندهٔ سرور نیاز دارد.
 
-برای آزادشدن خودکار موجودی رزروشدهٔ سفارش‌های منقضی، روی میزبان `chmod 700 scripts/expire-orders.sh scripts/backup-production-db.sh` را اجرا کنید و این نمونه‌ها را با مسیر واقعی پروژه در `crontab -e` کاربر سرویس قرار دهید:
+The `order-expiry-scheduler` Compose service checks for expired unpaid orders every minute, so no host cron entry is needed. The `scripts/expire-orders.sh` helper remains available for one-off manual runs. Add only the following database backup schedule to the service user's `crontab -e`, using the real project path:
 
 ```cron
-* * * * * /opt/janankadeh/scripts/expire-orders.sh
 30 2 * * * /opt/janankadeh/scripts/backup-production-db.sh
 ```
 
@@ -233,4 +231,4 @@ Administrators can review environment gate states and known operational gaps at 
 
 ## Order stock holds
 
-Creating an order atomically deducts its item quantities from available stock. Unpaid orders expire after 20 minutes; expiration cancels the order and its vendor suborders and restores quantities in a single database transaction. Production order creation and payment start fail closed until valid ZarinPal live configuration, a canonical HTTPS `AUTH_URL`, and `MARKETPLACE_LIVE_CHECKOUT_ENABLED=true` are present. Shipment and customer delivery-confirmation timestamps are recorded per vendor order for future return-window and settlement workflows; they do not trigger automatic seller payouts. For timely cleanup when the site is idle, configure a hosting scheduler to send `POST /api/cron/expire-orders` at least once per minute with `Authorization: Bearer <CRON_SECRET>`. Set a unique `CRON_SECRET` of at least 32 UTF-8 bytes in the production secret manager; the endpoint fails closed if the value is missing, too short, or left at the example placeholder. Never reuse `AUTH_SECRET`.
+Creating an order atomically deducts its item quantities from available stock. Unpaid orders expire after 20 minutes; expiration cancels the order and its vendor suborders and restores quantities in a single database transaction. Production order creation and payment start fail closed until valid ZarinPal live configuration, a canonical HTTPS `AUTH_URL`, and `MARKETPLACE_LIVE_CHECKOUT_ENABLED=true` are present. Shipment and customer delivery-confirmation timestamps are recorded per vendor order for future return-window and settlement workflows; they do not trigger automatic seller payouts. The `order-expiry-scheduler` Compose service calls `POST /api/cron/expire-orders` internally every minute and retries after failures. Set a unique `CRON_SECRET` of at least 32 UTF-8 bytes in the production secret manager; the endpoint fails closed if the value is missing, too short, or left at the example placeholder. Never reuse `AUTH_SECRET`.
