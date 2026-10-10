@@ -1,0 +1,1 @@
+deploy/nginx/reload-after-cert-renewal.sh text eol=lf
