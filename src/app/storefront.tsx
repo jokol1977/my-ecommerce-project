@@ -775,15 +775,17 @@ export default function Home({
       <header className="market-header sticky top-0 z-40 border-b bg-white shadow-sm">
         <div className="mx-auto max-w-7xl px-3 py-3 sm:px-4 lg:py-4">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen((value) => !value)}
-              className="rounded-xl p-2 text-slate-700 hover:bg-slate-100 lg:hidden"
-              aria-label="منوی موبایل"
-              aria-expanded={mobileMenuOpen}
-            >
-              {mobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
-            </button>
+            {(products.length > 0 || accountAccessEnabled || vendorApplicationsEnabled) && (
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((value) => !value)}
+                className="rounded-xl p-2 text-slate-700 hover:bg-slate-100 lg:hidden"
+                aria-label="منوی موبایل"
+                aria-expanded={mobileMenuOpen}
+              >
+                {mobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
+              </button>
+            )}
 
             <Link href="/" aria-label="صفحهٔ اصلی جانان‌کده" className="flex shrink-0 items-center gap-2.5">
               <div className="market-logo-mark flex h-11 w-11 items-center justify-center text-xl font-black text-white">
@@ -801,7 +803,7 @@ export default function Home({
               </div>
             </Link>
 
-            <div className="hidden flex-1 px-4 lg:block">
+            {products.length > 0 && <div className="hidden flex-1 px-4 lg:block">
               <div className="mx-auto flex max-w-3xl items-center gap-2">
                 <select
                   value={selectedCategory}
@@ -833,7 +835,7 @@ export default function Home({
                   </span>
                 </div>
               </div>
-            </div>
+            </div>}
 
             <div className="relative flex items-center gap-1 sm:gap-2">
               {accountAccessEnabled && (
@@ -1024,7 +1026,7 @@ export default function Home({
           </div>
         </div>
 
-        <div className="market-mobile-search relative mt-3 lg:hidden">
+        {products.length > 0 && <div className="market-mobile-search relative mt-3 lg:hidden">
           <input
             type="search"
             value={search}
@@ -1036,48 +1038,47 @@ export default function Home({
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
             <SearchIcon />
           </span>
-        </div>
+        </div>}
 
-        <div className="hidden border-t border-slate-100 lg:block">
+        {(products.length > 0 || vendorApplicationsEnabled) && <div className="hidden border-t border-slate-100 lg:block">
           <div className="mx-auto flex max-w-7xl items-center gap-1 px-4">
-            <button
-              type="button"
-              onClick={() => setMegaMenuOpen((value) => !value)}
-              className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-black transition ${
-                megaMenuOpen
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-slate-800 hover:text-blue-600"
-              }`}
-              aria-expanded={megaMenuOpen}
-            >
-              <MenuIcon />
-              دسته‌بندی کالاها
-            </button>
+            {products.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setMegaMenuOpen((value) => !value)}
+                  className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-black transition ${
+                    megaMenuOpen
+                      ? "border-blue-600 text-blue-600"
+                      : "border-transparent text-slate-800 hover:text-blue-600"
+                  }`}
+                  aria-expanded={megaMenuOpen}
+                >
+                  <MenuIcon />
+                  دسته‌بندی کالاها
+                </button>
 
-            <a
-              href="#products"
-              className="border-b-2 border-transparent px-4 py-3 text-sm text-slate-600 hover:border-blue-600 hover:text-blue-600"
-            >
-              محصولات پرفروش
-            </a>
+                <a
+                  href="#products"
+                  className="border-b-2 border-transparent px-4 py-3 text-sm text-slate-600 hover:border-blue-600 hover:text-blue-600"
+                >
+                  محصولات
+                </a>
+              </>
+            )}
 
-            <a
-              href="#products"
-              className="border-b-2 border-transparent px-4 py-3 text-sm text-slate-600 hover:border-blue-600 hover:text-blue-600"
-            >
-              پیشنهادهای ویژه
-            </a>
-
-            <a
-              href="#vendor-cta"
-              className="border-b-2 border-transparent px-4 py-3 text-sm text-slate-600 hover:border-blue-600 hover:text-blue-600"
-            >
-              فروشنده شوید
-            </a>
+            {vendorApplicationsEnabled && (
+              <Link
+                href="/seller/apply"
+                className="border-b-2 border-transparent px-4 py-3 text-sm text-slate-600 hover:border-blue-600 hover:text-blue-600"
+              >
+                فروشنده شوید
+              </Link>
+            )}
           </div>
-        </div>
+        </div>}
 
-        {megaMenuOpen && (
+        {products.length > 0 && megaMenuOpen && (
           <div className="hidden border-t border-slate-100 bg-white lg:block">
             <div className="mx-auto max-w-7xl px-4 py-6">
               <div className="grid grid-cols-5 gap-4">
@@ -1128,24 +1129,28 @@ export default function Home({
           </div>
         )}
 
-        {mobileMenuOpen && (
+        {mobileMenuOpen && (products.length > 0 || accountAccessEnabled || vendorApplicationsEnabled) && (
           <div className="border-t border-slate-100 bg-white px-4 py-4 lg:hidden">
-            <div className="mb-3 rounded-xl bg-blue-50 p-3 text-sm font-bold text-blue-700">
-              دسته‌بندی کالاها
-            </div>
+            {products.length > 0 && (
+              <>
+                <div className="mb-3 rounded-xl bg-blue-50 p-3 text-sm font-bold text-blue-700">
+                  دسته‌بندی کالاها
+                </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              {categoryOptions.map((category) => (
-                <button
-                  key={category.value}
-                  type="button"
-                  onClick={() => selectCategory(category.value)}
-                  className="rounded-xl bg-slate-50 px-3 py-3 text-right text-sm text-slate-700 hover:bg-blue-50"
-                >
-                  {category.label}
-                </button>
-              ))}
-            </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {categoryOptions.map((category) => (
+                    <button
+                      key={category.value}
+                      type="button"
+                      onClick={() => selectCategory(category.value)}
+                      className="rounded-xl bg-slate-50 px-3 py-3 text-right text-sm text-slate-700 hover:bg-blue-50"
+                    >
+                      {category.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             <div className="mt-4 space-y-1 border-t border-slate-100 pt-3">
               {accountAccessEnabled && (
@@ -1170,20 +1175,28 @@ export default function Home({
       <section className="market-hero" aria-labelledby="market-hero-title">
         <div className="market-hero-inner">
           <div className="market-hero-copy">
-            <span className="market-hero-eyebrow">از نیازهای روزمره تا انتخاب‌های خاص</span>
+            <span className="market-hero-eyebrow">
+              {publicCatalogOnly && products.length === 0 ? "بازارگاه آنلاین جانان‌کده" : "از نیازهای روزمره تا انتخاب‌های خاص"}
+            </span>
             <h1 id="market-hero-title" className="market-hero-title">
-              هر انتخاب خوب، از <em>جانان‌کده</em> شروع می‌شود.
+              {publicCatalogOnly && products.length === 0
+                ? <>ویترین جانان‌کده در حال آماده‌سازی است.</>
+                : <>هر انتخاب خوب، از <em>جانان‌کده</em> شروع می‌شود.</>}
             </h1>
             <p className="market-hero-description">
-              میان کالاها و فروشگاه‌های گوناگون بگرد، انتخابت را پیدا کن و خریدت را ساده‌تر پیش ببر.
+              {publicCatalogOnly && products.length === 0
+                ? "این نسخه برای مشاهدهٔ عمومی آماده است. کالاها پس از ثبت و تأیید در همین صفحه نمایش داده می‌شوند."
+                : "میان کالاها و فروشگاه‌های گوناگون بگرد، انتخابت را پیدا کن و خریدت را ساده‌تر پیش ببر."}
             </p>
             <div className="market-hero-actions">
               <a href="#products" className="market-primary-action">
-                دیدن محصولات <span aria-hidden="true">←</span>
+                {products.length > 0 ? "دیدن محصولات" : "مشاهدهٔ وضعیت ویترین"} <span aria-hidden="true">←</span>
               </a>
-              <Link href="/seller/apply" className="market-secondary-action">
-                فروشگاهت را بساز
-              </Link>
+              {vendorApplicationsEnabled && (
+                <Link href="/seller/apply" className="market-secondary-action">
+                  فروشگاهت را بساز
+                </Link>
+              )}
             </div>
           </div>
 
@@ -1203,7 +1216,7 @@ export default function Home({
         </div>
       </section>
 
-      <section className="market-benefits" aria-label="ویژگی‌های جانان‌کده">
+      {products.length > 0 && <section className="market-benefits" aria-label="ویژگی‌های جانان‌کده">
         <div className="market-benefit">
           <span className="market-benefit-icon" aria-hidden="true">✦</span>
           <div><strong>انتخاب‌های متنوع</strong><span>دسته‌های گوناگون، در یک جا</span></div>
@@ -1216,7 +1229,7 @@ export default function Home({
           <span className="market-benefit-icon" aria-hidden="true">◈</span>
           <div><strong>فروشگاه‌های مستقل</strong><span>خرید از فروشندگان بازارگاه</span></div>
         </div>
-      </section>
+      </section>}
 
       {products.length > 0 && (
         <section className="market-category-section" aria-labelledby="market-category-title">
