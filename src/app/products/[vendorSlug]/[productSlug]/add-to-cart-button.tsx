@@ -7,8 +7,16 @@ import type { StorefrontProduct } from "@/types/catalog";
 type CartItem = { product: StorefrontProduct; quantity: number };
 const CART_STORAGE_KEY = "janankadeh-cart";
 
-export default function AddToCartButton({ product }: { product: StorefrontProduct }) {
+export default function AddToCartButton({ product, enabled }: { product: StorefrontProduct; enabled: boolean }) {
   const [added, setAdded] = useState(false);
+
+  if (!enabled) {
+    return (
+      <p role="status" className="mt-5 rounded-xl bg-amber-50 p-4 text-center text-sm font-bold leading-7 text-amber-900">
+        خرید آنلاین در این نسخه فعال نیست.
+      </p>
+    );
+  }
 
   function addToCart() {
     try {

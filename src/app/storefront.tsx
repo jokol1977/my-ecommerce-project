@@ -19,6 +19,10 @@ type HomeProps = {
   initialCursor?: string | null;
   demoMode: boolean;
   initialCatalogError?: string | null;
+  checkoutEnabled: boolean;
+  vendorApplicationsEnabled: boolean;
+  accountAccessEnabled: boolean;
+  publicCatalogOnly: boolean;
 };
 
 type CartItem = {
@@ -404,6 +408,10 @@ export default function Home({
   initialCursor = null,
   demoMode,
   initialCatalogError = null,
+  checkoutEnabled,
+  vendorApplicationsEnabled,
+  accountAccessEnabled,
+  publicCatalogOnly,
 }: HomeProps) {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("همه");
@@ -427,6 +435,14 @@ export default function Home({
   const priceRangeInvalid = parsePriceFilter(minPriceInput) !== undefined
     && parsePriceFilter(maxPriceInput) !== undefined
     && parsePriceFilter(minPriceInput)! > parsePriceFilter(maxPriceInput)!;
+  const hasActiveCatalogFilters = Boolean(
+    search.trim() ||
+    selectedCategory !== "همه" ||
+    minPriceInput ||
+    maxPriceInput ||
+    inStockOnly,
+  );
+  const showCatalogControls = products.length > 0 || hasActiveCatalogFilters;
   const initialFilter = useRef("|همه|newest|||false");
   const activeCatalogRequest = useRef<AbortController | null>(null);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
@@ -750,27 +766,11 @@ export default function Home({
         </div>
       )}
 
-      <div className="market-promo hidden text-xs text-white sm:block">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2">
-          <span className="text-slate-300">
-            خرید آسان از فروشندگان منتخب JANANKADEH
-          </span>
-
-          <div className="flex gap-5 text-slate-300">
-            <a href="#" className="hover:text-white">
-              پیگیری سفارش
-            </a>
-
-            <a href="#" className="hover:text-white">
-              پشتیبانی
-            </a>
-
-            <Link href="/seller/apply" className="hover:text-white">
-              فروشنده شوید
-            </Link>
-          </div>
+      {publicCatalogOnly && (
+        <div className="market-promo px-4 py-2 text-center text-xs leading-6 text-white" role="status">
+          این نسخه برای مشاهدهٔ کاتالوگ است؛ ورود، ثبت سفارش و پذیرش فروشنده فعلاً فعال نیست.
         </div>
-      </div>
+      )}
 
       <header className="market-header sticky top-0 z-40 border-b bg-white shadow-sm">
         <div className="mx-auto max-w-7xl px-3 py-3 sm:px-4 lg:py-4">
@@ -836,38 +836,44 @@ export default function Home({
             </div>
 
             <div className="relative flex items-center gap-1 sm:gap-2">
-              <Link
-                href="/account"
-                className="hidden items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 lg:flex"
-              >
-                <UserIcon />
-                ورود / ثبت‌نام
-              </Link>
+              {accountAccessEnabled && (
+                <Link
+                  href="/account"
+                  className="hidden items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 lg:flex"
+                >
+                  <UserIcon />
+                  ورود / ثبت‌نام
+                </Link>
+              )}
 
-              <Link
-                href="/seller/apply"
-                className="hidden rounded-xl bg-amber-400 px-3 py-2.5 text-sm font-black text-slate-900 transition hover:bg-amber-300 lg:block"
-              >
-                پنل فروشندگان
-              </Link>
+              {vendorApplicationsEnabled && (
+                <Link
+                  href="/seller/apply"
+                  className="hidden rounded-xl bg-amber-400 px-3 py-2.5 text-sm font-black text-slate-900 transition hover:bg-amber-300 lg:block"
+                >
+                  پنل فروشندگان
+                </Link>
+              )}
 
-              <button
-                type="button"
-                className="relative rounded-xl p-2.5 text-slate-700 hover:bg-slate-100"
-                aria-label="سبد خرید"
-                aria-expanded={cartOpen}
-                onClick={() => setCartOpen((open) => !open)}
-              >
-                <CartIcon />
+              {checkoutEnabled && (
+                <button
+                  type="button"
+                  className="relative rounded-xl p-2.5 text-slate-700 hover:bg-slate-100"
+                  aria-label="سبد خرید"
+                  aria-expanded={cartOpen}
+                  onClick={() => setCartOpen((open) => !open)}
+                >
+                  <CartIcon />
 
-                {cartCount > 0 && (
-                  <span className="absolute -left-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">
-                    {cartCount}
-                  </span>
-                )}
-              </button>
+                  {cartCount > 0 && (
+                    <span className="absolute -left-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">
+                      {cartCount}
+                    </span>
+                  )}
+                </button>
+              )}
 
-              {cartOpen && (
+              {checkoutEnabled && cartOpen && (
                 <div className="absolute left-0 top-full z-50 mt-2 max-h-[75vh] w-[min(90vw,360px)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h2 className="text-base font-black text-slate-900">
@@ -1142,19 +1148,20 @@ export default function Home({
             </div>
 
             <div className="mt-4 space-y-1 border-t border-slate-100 pt-3">
-              <a
-                href="#"
-                className="block rounded-lg p-3 text-sm hover:bg-slate-50"
-              >
-                ورود / ثبت‌نام
-              </a>
+              {accountAccessEnabled && (
+                <Link href="/account" className="block rounded-lg p-3 text-sm hover:bg-slate-50">
+                  ورود / ثبت‌نام
+                </Link>
+              )}
 
-              <Link
-                href="/seller/apply"
-                className="block rounded-lg bg-amber-400 p-3 text-center text-sm font-black"
-              >
-                پنل فروشندگان
-              </Link>
+              {vendorApplicationsEnabled && (
+                <Link
+                  href="/seller/apply"
+                  className="block rounded-lg bg-amber-400 p-3 text-center text-sm font-black"
+                >
+                  پنل فروشندگان
+                </Link>
+              )}
             </div>
           </div>
         )}
@@ -1211,28 +1218,30 @@ export default function Home({
         </div>
       </section>
 
-      <section className="market-category-section" aria-labelledby="market-category-title">
-        <div>
-          <span className="market-section-kicker">کشف جانان‌کده</span>
-          <h2 id="market-category-title" className="market-section-title">از کجا شروع کنیم؟</h2>
-        </div>
-        <div className="market-category-grid">
-          {categoryOptions.filter((category) => category.value !== "همه").slice(0, 4).map((category, index) => (
-            <button
-              key={category.value}
-              type="button"
-              onClick={() => {
-                selectCategory(category.value);
-                document.getElementById("products")?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-              className="market-category-tile"
-            >
-              <span className="market-category-icon" aria-hidden="true">{["✦", "◈", "⌂", "✳"][index]}</span>
-              <span><strong>{category.label}</strong><small>دیدن انتخاب‌ها</small></span>
-            </button>
-          ))}
-        </div>
-      </section>
+      {products.length > 0 && (
+        <section className="market-category-section" aria-labelledby="market-category-title">
+          <div>
+            <span className="market-section-kicker">کشف جانان‌کده</span>
+            <h2 id="market-category-title" className="market-section-title">از کجا شروع کنیم؟</h2>
+          </div>
+          <div className="market-category-grid">
+            {categoryOptions.filter((category) => category.value !== "همه").slice(0, 4).map((category, index) => (
+              <button
+                key={category.value}
+                type="button"
+                onClick={() => {
+                  selectCategory(category.value);
+                  document.getElementById("products")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="market-category-tile"
+              >
+                <span className="market-category-icon" aria-hidden="true">{["✦", "◈", "⌂", "✳"][index]}</span>
+                <span><strong>{category.label}</strong><small>دیدن انتخاب‌ها</small></span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section
         id="products"
@@ -1253,6 +1262,8 @@ export default function Home({
           </span>
         </div>
 
+        {showCatalogControls && (
+          <>
         <div className="market-category-filters mb-7 flex gap-3 overflow-x-auto pb-2">
           {categoryOptions.map((category) => (
             <button
@@ -1289,6 +1300,8 @@ export default function Home({
             <option value="price-desc">گران‌ترین</option>
           </select>
         </div>
+          </>
+        )}
 
         {catalogLoading && (
           <p role="status" className="mb-4 text-sm text-slate-500">
@@ -1297,15 +1310,37 @@ export default function Home({
         )}
 
         {filteredProducts.length === 0 ? (
-          <div className="rounded-2xl bg-white p-12 text-center shadow-sm">
-            <div className="mb-3 text-4xl">🔎</div>
-
-            <h3 className="font-bold">محصولی پیدا نشد</h3>
-
-            <p className="mt-2 text-sm text-slate-500">
-              عبارت دیگری را جست‌وجو کن.
-            </p>
-          </div>
+          catalogLoading || catalogError ? null : (
+            <div className="market-empty-state rounded-3xl border border-emerald-100 bg-white px-6 py-12 text-center shadow-sm sm:px-12">
+              <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-2xl text-emerald-800" aria-hidden="true">
+                {hasActiveCatalogFilters ? "⌕" : "✦"}
+              </div>
+              <h3 className="text-lg font-black text-slate-900">
+                {hasActiveCatalogFilters ? "با این جست‌وجو محصولی پیدا نشد" : "هنوز کالایی برای نمایش منتشر نشده است"}
+              </h3>
+              <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-600">
+                {hasActiveCatalogFilters
+                  ? "عبارت جست‌وجو یا فیلترها را تغییر بده و دوباره بررسی کن."
+                  : "ویترین عمومی آمادهٔ مشاهده است؛ کالاها پس از ثبت و تأیید در همین بخش نمایش داده می‌شوند."}
+              </p>
+              {hasActiveCatalogFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setSelectedCategory("همه");
+                    setMinPriceInput("");
+                    setMaxPriceInput("");
+                    setInStockOnly(false);
+                    setSort("newest");
+                  }}
+                  className="mt-5 min-h-11 rounded-xl border border-emerald-800 px-5 text-sm font-bold text-emerald-900 transition hover:bg-emerald-50"
+                >
+                  پاک‌کردن جست‌وجو و فیلترها
+                </button>
+              )}
+            </div>
+          )
         ) : (
           <div className="market-product-grid grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
             {filteredProducts.map((product) => (
@@ -1362,14 +1397,20 @@ export default function Home({
                       </span>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => addToCart(product)}
-                      disabled={product.inStock === false}
-                      className="market-add-button min-h-[40px] rounded-lg px-3 py-2 text-sm font-black disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {product.inStock === false ? "ناموجود" : "افزودن به سبد"}
-                    </button>
+                    {checkoutEnabled ? (
+                      <button
+                        type="button"
+                        onClick={() => addToCart(product)}
+                        disabled={product.inStock === false}
+                        className="market-add-button min-h-[40px] rounded-lg px-3 py-2 text-sm font-black disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {product.inStock === false ? "ناموجود" : "افزودن به سبد"}
+                      </button>
+                    ) : (
+                      <span className="text-xs font-bold text-slate-500" role="status">
+                        خرید آنلاین غیرفعال
+                      </span>
+                    )}
                   </div>
                 </div>
               </article>
@@ -1391,30 +1432,32 @@ export default function Home({
         )}
       </section>
 
-      <section
-        id="vendor-cta"
-        className="market-vendor-section mx-auto max-w-7xl px-3 pb-10 sm:px-4"
-      >
-        <div className="market-vendor-banner flex flex-col items-start justify-between gap-5 px-5 py-7 text-white sm:px-8 sm:py-9 lg:flex-row lg:items-center">
-          <div>
-            <span className="market-section-kicker text-orange-200">برای فروشندگان</span>
-            <h2 className="mb-2 text-2xl font-black sm:text-3xl">
-              ویترین خودت را در جانان‌کده بساز
-            </h2>
+      {vendorApplicationsEnabled && (
+        <section
+          id="vendor-cta"
+          className="market-vendor-section mx-auto max-w-7xl px-3 pb-10 sm:px-4"
+        >
+          <div className="market-vendor-banner flex flex-col items-start justify-between gap-5 px-5 py-7 text-white sm:px-8 sm:py-9 lg:flex-row lg:items-center">
+            <div>
+              <span className="market-section-kicker text-orange-200">برای فروشندگان</span>
+              <h2 className="mb-2 text-2xl font-black sm:text-3xl">
+                ویترین خودت را در جانان‌کده بساز
+              </h2>
 
-            <p className="max-w-2xl text-sm leading-7 text-emerald-50/80">
-              فروشگاهت را معرفی کن، محصولاتت را ثبت کن و در کنار دیگر فروشندگان رشد بده.
-            </p>
+              <p className="max-w-2xl text-sm leading-7 text-emerald-50/80">
+                فروشگاهت را معرفی کن، محصولاتت را ثبت کن و در کنار دیگر فروشندگان رشد بده.
+              </p>
+            </div>
+
+            <Link
+              href="/seller/apply"
+              className="market-vendor-action px-6 py-3 font-black"
+            >
+              شروع فروشندگی <span aria-hidden="true">←</span>
+            </Link>
           </div>
-
-          <Link
-            href="/seller/apply"
-            className="market-vendor-action px-6 py-3 font-black"
-          >
-            شروع فروشندگی <span aria-hidden="true">←</span>
-          </Link>
-        </div>
-      </section>
+        </section>
+      )}
 
       <footer className="market-footer px-4 py-8 sm:py-10">
         <div className="mx-auto flex w-full max-w-[78rem] flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -1424,8 +1467,8 @@ export default function Home({
           </div>
           <nav aria-label="پیوندهای پایانی" className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
             <a href="#products" className="transition hover:text-emerald-900">محصولات</a>
-            <Link href="/seller/apply" className="transition hover:text-emerald-900">فروشندگان</Link>
-            <Link href="/account" className="transition hover:text-emerald-900">حساب کاربری</Link>
+            {vendorApplicationsEnabled && <Link href="/seller/apply" className="transition hover:text-emerald-900">فروشندگان</Link>}
+            {accountAccessEnabled && <Link href="/account" className="transition hover:text-emerald-900">حساب کاربری</Link>}
           </nav>
         </div>
       </footer>

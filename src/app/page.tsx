@@ -8,15 +8,35 @@ import {
 import { getPrisma } from "@/lib/prisma";
 import { getCategoryPaths } from "@/lib/category-tree";
 import {
+  isLiveCheckoutGateEnabled,
+  isVendorApprovalEnabled,
+} from "@/lib/marketplace-config";
+import {
   toStorefrontProduct,
   type StorefrontProduct,
 } from "@/types/catalog";
 import Storefront from "./storefront";
 
 async function StorefrontContent() {
+  const checkoutEnabled = isLiveCheckoutGateEnabled();
+  const vendorApplicationsEnabled = isVendorApprovalEnabled();
+  // This release intentionally has no sign-in provider configured.
+  const accountAccessEnabled = false;
+  const publicCatalogOnly =
+    process.env.NODE_ENV === "production" &&
+    !checkoutEnabled &&
+    !vendorApplicationsEnabled &&
+    !accountAccessEnabled;
+  const releaseFeatures = {
+    checkoutEnabled,
+    vendorApplicationsEnabled,
+    accountAccessEnabled,
+    publicCatalogOnly,
+  };
+
   if (!hasCatalogDatabaseConfiguration()) {
     if (shouldUseDemoCatalog()) {
-      return <Storefront initialProducts={DEMO_PRODUCTS} demoMode />;
+      return <Storefront initialProducts={DEMO_PRODUCTS} demoMode {...releaseFeatures} />;
     }
 
     return (
@@ -24,6 +44,7 @@ async function StorefrontContent() {
         initialProducts={[]}
         demoMode={false}
         initialCatalogError="پیکربندی پایگاه داده انجام نشده است."
+        {...releaseFeatures}
       />
     );
   }
@@ -59,6 +80,7 @@ async function StorefrontContent() {
       initialCursor={initialCursor}
       demoMode={false}
       initialCatalogError={initialCatalogError}
+      {...releaseFeatures}
     />
   );
 }

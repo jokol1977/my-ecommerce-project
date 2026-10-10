@@ -6,6 +6,7 @@ import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { getPublicProduct, hasCatalogDatabaseConfiguration } from "@/lib/catalog";
+import { isLiveCheckoutGateEnabled } from "@/lib/marketplace-config";
 import { getPrisma } from "@/lib/prisma";
 import AddToCartButton from "./add-to-cart-button";
 import ReviewForm from "./review-form";
@@ -50,6 +51,7 @@ async function ProductContent({ params }: ProductRouteProps) {
   if (!product) notFound();
 
   const session = await auth();
+  const checkoutEnabled = isLiveCheckoutGateEnabled();
   const customerId = session?.user?.id && session.user.status === "ACTIVE" && session.user.role === "CUSTOMER"
     ? session.user.id
     : null;
@@ -102,24 +104,27 @@ async function ProductContent({ params }: ProductRouteProps) {
               فروشنده: <Link href={`/stores/${encodeURIComponent(product.vendor.slug)}`} className="font-bold text-slate-900 hover:text-blue-700 hover:underline">{product.vendor.storeName}</Link>
             </p>
             <p className={`mt-4 text-sm font-bold ${product.inStock ? "text-emerald-700" : "text-slate-500"}`}>
-              {product.inStock ? "موجود و آماده سفارش" : "فعلاً ناموجود"}
+              {product.inStock ? (checkoutEnabled ? "موجود و آماده سفارش" : "موجود") : "فعلاً ناموجود"}
             </p>
 
             <div className="mt-8 rounded-2xl bg-slate-50 p-5">
               <p className="text-sm text-slate-500">قیمت فروشنده</p>
               <p className="mt-2 text-2xl font-black text-blue-800">{formatPrice(product.priceToman)} <span className="text-sm">تومان</span></p>
               <p className="mt-4 text-xs leading-6 text-slate-500">موجودی و قیمت نهایی هنگام آماده‌سازی سفارش از سرور بررسی می‌شود.</p>
-              <AddToCartButton product={{
-                id: product.id,
-                name: product.name,
-                price: formatPrice(product.priceToman),
-                image: product.image?.url ?? "/images/placeholder.png",
-                vendorName: product.vendor.storeName,
-                category: product.category.name,
-                badge: product.inStock ? "موجود" : "ناموجود",
-                inStock: product.inStock,
-                href: `/products/${encodeURIComponent(product.vendor.slug)}/${encodeURIComponent(product.slug)}`,
-              }} />
+              <AddToCartButton
+                product={{
+                  id: product.id,
+                  name: product.name,
+                  price: formatPrice(product.priceToman),
+                  image: product.image?.url ?? "/images/placeholder.png",
+                  vendorName: product.vendor.storeName,
+                  category: product.category.name,
+                  badge: product.inStock ? "موجود" : "ناموجود",
+                  inStock: product.inStock,
+                  href: `/products/${encodeURIComponent(product.vendor.slug)}/${encodeURIComponent(product.slug)}`,
+                }}
+                enabled={checkoutEnabled}
+              />
             </div>
 
             <section className="mt-8 border-t border-slate-100 pt-6">
@@ -142,7 +147,7 @@ async function ProductContent({ params }: ProductRouteProps) {
           </article>)}</div>}
           {customerId && deliveredPurchase && !existingReview && <ReviewForm productId={product.id} />}
           {customerId && deliveredPurchase && existingReview && <p className="mt-5 rounded-xl bg-blue-50 p-4 text-sm leading-7 text-blue-900">برای این کالا دیدگاه ثبت کرده‌اید؛ پس از بررسی مدیر، در همین صفحه نمایش داده می‌شود.</p>}
-          {!session?.user?.id && <p className="mt-5 text-sm text-slate-600"><Link href="/login" className="font-bold text-blue-700 hover:underline">وارد حساب شوید</Link>؛ ثبت دیدگاه پس از تحویل سفارش فعال می‌شود.</p>}
+          {!session?.user?.id && <p className="mt-5 text-sm text-slate-600">ثبت دیدگاه پس از فعال‌شدن ورود مشتریان و تحویل سفارش در دسترس خواهد بود.</p>}
           {session?.user?.id && !customerId && <p className="mt-5 text-sm text-slate-600">ثبت دیدگاه برای حساب مشتری پس از تحویل سفارش امکان‌پذیر است.</p>}
           {customerId && !deliveredPurchase && <p className="mt-5 text-sm text-slate-600">پس از تحویل این کالا، می‌توانید دیدگاه ثبت کنید.</p>}
         </section>
