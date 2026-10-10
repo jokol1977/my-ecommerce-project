@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Vazirmatn } from "next/font/google";
+import { connection } from "next/server";
 import "./globals.css";
 
 const vazir = Vazirmatn({
@@ -14,11 +15,13 @@ export const metadata: Metadata = {
     "محصولات متنوع را از فروشندگان جانان‌کده پیدا و با خیال آسوده خریداری کنید.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  await connection();
+
   return (
     <html lang="fa" dir="rtl">
       <body className={vazir.className}>

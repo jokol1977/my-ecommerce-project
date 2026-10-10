@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { connection } from "next/server";
 import { DEMO_PRODUCTS } from "@/data/demo-catalog";
 import {
   getPublicCatalog,
@@ -28,8 +27,6 @@ async function StorefrontContent() {
       />
     );
   }
-
-  await connection();
 
   let initialProducts: StorefrontProduct[] = [];
   let categoryOptions: Array<{ value: string; label: string }> = [{ value: "همه", label: "همه" }];
