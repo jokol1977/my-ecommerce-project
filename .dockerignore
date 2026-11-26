@@ -4,7 +4,19 @@ node_modules
 src/generated/prisma
 .env*
 backups
+/.product-uploads
+/catalog-input
 /releases
+/tmp
+/.tmp
+/docs
+/server-source-*
+/video amozeshi
+/tasavir aplod shodeh AI
+/.npmrc
+/favicon-inspect.png
+**/*.docx
+**/*.zip
 coverage
 out
 *.log

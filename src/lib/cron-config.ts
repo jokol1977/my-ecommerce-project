@@ -1,10 +1,16 @@
 import "server-only";
-
-const insecurePlaceholder = "replace_with_a_different_random_secret_of_at_least_32_bytes";
+import {
+  areDistinctUrlSafeSecrets,
+  hasPlaceholderPrefix,
+  isUrlSafeSecret,
+} from "@/lib/config-secrets";
 
 export function hasUsableCronSecret(secret: string | undefined = process.env.CRON_SECRET): secret is string {
-  return Boolean(
-    secret && Buffer.byteLength(secret, "utf8") >= 32 &&
-    secret !== insecurePlaceholder && !secret.startsWith("replace_with_"),
-  );
+  if (!secret || Buffer.byteLength(secret, "utf8") < 32 || hasPlaceholderPrefix(secret)) return false;
+  if (process.env.NODE_ENV !== "production") return true;
+  return isUrlSafeSecret(secret) && areDistinctUrlSafeSecrets([
+    process.env.AUTH_SECRET,
+    process.env.RATE_LIMIT_SECRET,
+    secret,
+  ]);
 }

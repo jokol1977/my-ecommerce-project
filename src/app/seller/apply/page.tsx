@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getPrisma } from "@/lib/prisma";
 import { isVendorApprovalEnabled } from "@/lib/marketplace-config";
+import { getCurrentVendorAgreement } from "@/lib/vendor-agreement";
 import VendorApplicationForm from "./form";
 
 export const metadata: Metadata = { title: "درخواست فروشندگی | جانان‌کده" };
@@ -16,14 +17,18 @@ const vendorStatusText: Record<string, string> = {
 };
 
 export default async function VendorApplicationPage() {
-  if (!isVendorApprovalEnabled()) {
+  const approvalEnabled = isVendorApprovalEnabled();
+  const agreement = approvalEnabled ? await getCurrentVendorAgreement() : null;
+  if (!approvalEnabled || !agreement) {
     return (
       <main dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10">
         <section className="w-full max-w-xl rounded-3xl border border-slate-100 bg-white p-7 text-center shadow-sm sm:p-10">
           <p className="text-sm font-bold text-emerald-800">جانان‌کده</p>
           <h1 className="mt-3 text-2xl font-black text-slate-900">پذیرش فروشنده فعلاً فعال نیست</h1>
           <p role="status" className="mt-4 leading-8 text-slate-600">
-            این نسخه برای مشاهدهٔ کاتالوگ عمومی است. پس از آماده‌شدن قرارداد و روند بررسی فروشندگان، ثبت درخواست از همین سایت در دسترس خواهد بود.
+            {!approvalEnabled
+              ? "این نسخه برای مشاهدهٔ کاتالوگ عمومی است. پس از آماده‌شدن قرارداد و روند بررسی فروشندگان، ثبت درخواست از همین سایت در دسترس خواهد بود."
+              : "نسخهٔ نهایی و تأییدشدهٔ قرارداد فروشنده در دسترس نیست؛ ثبت درخواست تا انتشار و تطبیق نسخهٔ قرارداد بسته می‌ماند."}
           </p>
           <Link href="/" className="mt-7 inline-flex min-h-12 items-center justify-center rounded-xl bg-emerald-800 px-6 font-bold text-white transition hover:bg-emerald-900">
             بازگشت به کاتالوگ
@@ -60,7 +65,7 @@ export default async function VendorApplicationPage() {
         ) : (
           <>
             <p className="mt-3 text-sm leading-7 text-slate-600">درخواست‌ها پیش از فعال‌شدن فروشگاه توسط مدیر بررسی می‌شوند. تا آن زمان فروشگاه یا کالایی در فهرست عمومی نمایش داده نمی‌شود.</p>
-            <VendorApplicationForm />
+            <VendorApplicationForm agreement={agreement} />
           </>
         )}
       </div>

@@ -48,6 +48,15 @@ services:
       PORT: 3000
       AUTH_URL: ${AUTH_URL:?Set AUTH_URL to the HTTPS site origin}
       AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET}
+      AUTH_LOGIN_ENABLED: ${AUTH_LOGIN_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      AUTH_MFA_ENCRYPTION_KEY: ${AUTH_MFA_ENCRYPTION_KEY:-}
+      AUTH_ADMIN_MFA_ENROLLMENT_SECRET: ${AUTH_ADMIN_MFA_ENROLLMENT_SECRET:-}
       DATABASE_URL: ${DATABASE_URL:?Set the janan_app DATABASE_URL}
       REDIS_URL: ${REDIS_URL:?Set the authenticated REDIS_URL}
       RATE_LIMIT_SECRET: ${RATE_LIMIT_SECRET:?Set RATE_LIMIT_SECRET}
@@ -57,11 +66,16 @@ services:
       ZARINPAL_MERCHANT_ID: ${ZARINPAL_MERCHANT_ID:-}
       MARKETPLACE_LIVE_CHECKOUT_ENABLED: ${MARKETPLACE_LIVE_CHECKOUT_ENABLED:-false}
       VENDOR_APPROVAL_ENABLED: ${VENDOR_APPROVAL_ENABLED:-false}
+      PRODUCT_IMAGE_VOLUME_LIMIT_BYTES: ${PRODUCT_IMAGE_VOLUME_LIMIT_BYTES:-}
+      PRODUCT_IMAGE_VOLUME_MIN_FREE_BYTES: ${PRODUCT_IMAGE_VOLUME_MIN_FREE_BYTES:-}
+      PRODUCT_IMAGE_DIR: /app/product-uploads
       SMS_PROVIDER: ${SMS_PROVIDER:-disabled}
       KAVENEGAR_API_KEY: ${KAVENEGAR_API_KEY:-}
       KAVENEGAR_SENDER: ${KAVENEGAR_SENDER:-}
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
+    volumes:
+      - product-images:/app/product-uploads
     depends_on:
       database:
         condition: service_healthy
@@ -111,3 +125,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  product-images:

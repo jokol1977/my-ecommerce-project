@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { auth } from "@/auth";
 import { getPrisma } from "@/lib/prisma";
 import { readRequestBody } from "@/lib/request-body";
-import { parseProductInput } from "@/lib/product-input";
+import { isSellerSkuConflict, parseProductInput } from "@/lib/product-input";
 import { limitVendorCatalogWrites } from "@/lib/vendor-catalog-write-rate-limit";
 
 export const runtime = "nodejs";
@@ -63,6 +63,20 @@ export async function POST(request: Request) {
         slug: `product-${randomUUID().replaceAll("-", "").slice(0, 20)}`,
         name: input.name,
         description: input.description,
+        brandName: input.brandName,
+        productType: input.productType,
+        modelCode: input.modelCode,
+        sellerSku: input.sellerSku,
+        publicProductId: input.publicProductId,
+        originCountry: input.originCountry,
+        packageLengthMm: input.packageLengthMm,
+        packageWidthMm: input.packageWidthMm,
+        packageHeightMm: input.packageHeightMm,
+        packageWeightGrams: input.packageWeightGrams,
+        warrantyDescription: input.warrantyDescription,
+        specificationsText: input.specificationsText,
+        sourceReference: input.sourceReference,
+        sellerContentAttestedAt: new Date(),
         priceToman: input.priceToman,
         stockQuantity: input.stockQuantity,
         status: "PENDING_REVIEW",
@@ -71,6 +85,7 @@ export async function POST(request: Request) {
     });
     return Response.json(product, { status: 201, headers: noStore });
   } catch (error) {
+    if (isSellerSkuConflict(error)) return Response.json({ error: "کد کالای فروشنده قبلاً در همین فروشگاه استفاده شده است." }, { status: 409, headers: noStore });
     console.error("Vendor product submission failed.", error);
     return Response.json({ error: "ثبت کالا انجام نشد. دوباره تلاش کنید." }, { status: 503, headers: noStore });
   }

@@ -1,0 +1,1 @@
+ALTER TABLE "Product" ADD COLUMN "reviewNote" VARCHAR(500);

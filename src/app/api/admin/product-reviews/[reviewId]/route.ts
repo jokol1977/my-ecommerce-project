@@ -9,7 +9,7 @@ const noStore = { "Cache-Control": "no-store" };
 export async function PATCH(request: Request, { params }: { params: Promise<{ reviewId: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: "ورود لازم است." }, { status: 401, headers: noStore });
-  if (session.user.status !== "ACTIVE" || session.user.role !== "ADMIN") return Response.json({ error: "دسترسی مدیر لازم است." }, { status: 403, headers: noStore });
+  if (session.user.status !== "ACTIVE" || session.user.role !== "ADMIN" || session.user.mfaVerified !== true) return Response.json({ error: "دسترسی مدیر لازم است." }, { status: 403, headers: noStore });
   if (process.env.NODE_ENV === "production" && !process.env.AUTH_URL) return Response.json({ error: "نشانی رسمی سایت پیکربندی نشده است." }, { status: 503, headers: noStore });
   try {
     const origin = request.headers.get("origin");

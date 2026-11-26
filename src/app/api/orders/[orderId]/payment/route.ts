@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { getPrisma } from "@/lib/prisma";
 import { checkAccountRateLimit } from "@/lib/rate-limit";
-import { releaseExpiredOrderReservations } from "@/lib/order-reservations";
+import { ORDER_PAYMENT_WINDOW_MS, ORDER_RESERVATION_MAX_AGE_MS, releaseExpiredOrderReservations } from "@/lib/order-reservations";
 import { isPaymentAvailable } from "@/lib/payment-config";
 import { ZARINPAL_MINIMUM_AMOUNT_TOMAN, ZARINPAL_PROVIDER, createZarinpalPayment, getZarinpalConfiguration, zarinpalCallbackUrl, zarinpalStartPayUrl } from "@/lib/zarinpal";
 
@@ -45,7 +45,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
   const now = new Date();
   const staleBefore = new Date(now.getTime() - ACTIVE_PAYMENT_STALE_MS);
   type StartDecision =
-    | { kind: "new"; paymentId: string; amountToman: number }
+    | { kind: "new"; paymentId: string; amountToman: number; reservationHardEnd: Date }
     | { kind: "redirect"; redirectUrl: string }
     | { kind: "verify"; redirectUrl: string }
     | { kind: "processing" }
@@ -59,7 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
 
       const order = await tx.order.findFirst({
         where: { id: orderId, customerId: session.user.id },
-        select: { id: true, status: true, totalToman: true, paymentExpiresAt: true },
+        select: { id: true, status: true, totalToman: true, paymentExpiresAt: true, createdAt: true },
       });
       if (!order) return { kind: "error", message: "سفارش پیدا نشد یا متعلق به این حساب نیست.", status: 404 };
       if (order.status === "PAYMENT_REVIEW") return { kind: "error", message: "پرداخت این سفارش در حال بررسی مدیر است.", status: 409 };
@@ -91,12 +91,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
         await tx.payment.updateMany({ where: { id: active.id, status: "PENDING", providerReference: null }, data: { status: "FAILED" } });
       }
 
+      const reservationHardEnd = new Date(order.createdAt.getTime() + ORDER_RESERVATION_MAX_AGE_MS);
+      const paymentExpiresAt = new Date(Math.min(now.getTime() + ORDER_PAYMENT_WINDOW_MS, reservationHardEnd.getTime()));
+      if (paymentExpiresAt <= now) return { kind: "error", message: "مهلت رزرو سفارش تمام شده است؛ سبد خرید را دوباره ثبت کنید.", status: 409 };
       const payment = await tx.payment.create({
         data: { orderId, provider: ZARINPAL_PROVIDER, amountToman: order.totalToman, status: "PENDING" },
         select: { id: true },
       });
-      await tx.order.update({ where: { id: orderId }, data: { paymentExpiresAt: new Date(now.getTime() + 20 * 60 * 1000) } });
-      return { kind: "new", paymentId: payment.id, amountToman: order.totalToman };
+      await tx.order.update({ where: { id: orderId }, data: { paymentExpiresAt } });
+      return { kind: "new", paymentId: payment.id, amountToman: order.totalToman, reservationHardEnd };
     }, { isolationLevel: "Serializable", timeout: 15_000 });
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && error.code === "P2034") {
@@ -117,6 +120,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
 
   try {
     const created = await createZarinpalPayment({ configuration, amountToman: decision.amountToman, orderId });
+    const authoritySavedAt = new Date();
+    const paymentExpiresAt = new Date(Math.min(authoritySavedAt.getTime() + ORDER_PAYMENT_WINDOW_MS, decision.reservationHardEnd.getTime()));
+    if (paymentExpiresAt <= authoritySavedAt) throw new Error("Order reservation expired before the gateway authority was stored.");
     await prisma.$transaction(async (tx) => {
       const saved = await tx.payment.updateMany({
         where: { id: decision.paymentId, status: "PENDING", providerReference: null },
@@ -124,8 +130,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
       });
       if (saved.count !== 1) throw new Error("Payment attempt changed before the gateway authority was stored.");
       const orderSaved = await tx.order.updateMany({
-        where: { id: orderId, customerId: session.user.id, status: "PENDING_PAYMENT" },
-        data: { paymentExpiresAt: new Date(Date.now() + 20 * 60 * 1000) },
+        where: { id: orderId, customerId: session.user.id, status: "PENDING_PAYMENT", paymentExpiresAt: { gt: authoritySavedAt } },
+        data: { paymentExpiresAt },
       });
       if (orderSaved.count !== 1) throw new Error("Order changed before the gateway authority was stored.");
     }, { isolationLevel: "Serializable", timeout: 10_000 });

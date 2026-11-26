@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPrisma } from "@/lib/prisma";
+import { ZARINPAL_PROVIDER } from "@/lib/zarinpal";
 import { requireActiveAdmin } from "@/lib/require-active-admin";
 import AdminNavigation from "@/app/admin/admin-navigation";
 
@@ -89,7 +90,7 @@ export default async function AdminFinanceReconciliationPage({ searchParams }: R
   const prisma = getPrisma();
   const offset = (page - 1) * PAGE_SIZE;
   const [missingCount, mismatchCounts, duplicateCounts] = await Promise.all([
-    prisma.payment.count({ where: { provider: "zarinpal", status: "SUCCEEDED", ledgerTransfers: { none: {} } } }),
+    prisma.payment.count({ where: { provider: ZARINPAL_PROVIDER, status: "SUCCEEDED", ledgerTransfers: { none: {} } } }),
     prisma.$queryRaw<Array<{ count: bigint }>>`
       WITH per_payment AS (
         SELECT "paymentId", COUNT(*) AS transfer_count
@@ -101,7 +102,7 @@ export default async function AdminFinanceReconciliationPage({ searchParams }: R
       JOIN "Payment" p ON p."id" = lt."paymentId"
       JOIN "Order" o ON o."id" = p."orderId"
       JOIN per_payment pp ON pp."paymentId" = lt."paymentId"
-      WHERE p."provider" <> 'zarinpal'
+      WHERE p."provider" <> ${ZARINPAL_PROVIDER}
         OR p."status" <> 'SUCCEEDED'
         OR p."verifiedAt" IS NULL
         OR p."providerTransactionId" IS NULL
@@ -119,7 +120,7 @@ export default async function AdminFinanceReconciliationPage({ searchParams }: R
       FROM (
         SELECT "orderId"
         FROM "Payment"
-        WHERE "provider" = 'zarinpal' AND "status" = 'SUCCEEDED'
+        WHERE "provider" = ${ZARINPAL_PROVIDER} AND "status" = 'SUCCEEDED'
         GROUP BY "orderId"
         HAVING COUNT(*) > 1
       ) duplicates
@@ -130,7 +131,7 @@ export default async function AdminFinanceReconciliationPage({ searchParams }: R
 
   const records = issue === "missing-ledger"
     ? await prisma.payment.findMany({
-        where: { provider: "zarinpal", status: "SUCCEEDED", ledgerTransfers: { none: {} } },
+        where: { provider: ZARINPAL_PROVIDER, status: "SUCCEEDED", ledgerTransfers: { none: {} } },
         orderBy: [{ verifiedAt: "desc" }, { id: "desc" }],
         skip: offset,
         take: PAGE_SIZE + 1,
@@ -167,7 +168,7 @@ export default async function AdminFinanceReconciliationPage({ searchParams }: R
             o."totalToman" AS "orderTotalToman",
             o."status"::text AS "orderStatus",
             concat_ws('؛ ',
-              CASE WHEN p."provider" <> 'zarinpal' THEN 'درگاه با زرین‌پال منطبق نیست' END,
+              CASE WHEN p."provider" <> ${ZARINPAL_PROVIDER} THEN 'درگاه با زرین‌پال منطبق نیست' END,
               CASE WHEN p."status" <> 'SUCCEEDED' THEN 'وضعیت پرداخت موفق نیست' END,
               CASE WHEN p."verifiedAt" IS NULL THEN 'زمان تأیید پرداخت ثبت نشده' END,
               CASE WHEN p."providerTransactionId" IS NULL THEN 'شناسه تراکنش زرین‌پال ثبت نشده' END,
@@ -184,7 +185,7 @@ export default async function AdminFinanceReconciliationPage({ searchParams }: R
           JOIN "Payment" p ON p."id" = lt."paymentId"
           JOIN "Order" o ON o."id" = p."orderId"
           JOIN per_payment pp ON pp."paymentId" = lt."paymentId"
-          WHERE p."provider" <> 'zarinpal'
+          WHERE p."provider" <> ${ZARINPAL_PROVIDER}
             OR p."status" <> 'SUCCEEDED'
             OR p."verifiedAt" IS NULL
             OR p."providerTransactionId" IS NULL
@@ -203,7 +204,7 @@ export default async function AdminFinanceReconciliationPage({ searchParams }: R
           WITH duplicates AS (
             SELECT "orderId", COUNT(*)::integer AS "paymentCount", SUM("amountToman") AS "paymentTotalToman"
             FROM "Payment"
-            WHERE "provider" = 'zarinpal' AND "status" = 'SUCCEEDED'
+            WHERE "provider" = ${ZARINPAL_PROVIDER} AND "status" = 'SUCCEEDED'
             GROUP BY "orderId"
             HAVING COUNT(*) > 1
           )

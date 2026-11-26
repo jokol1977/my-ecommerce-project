@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       if (count >= 20) return null;
       return tx.address.create({
         data: { userId: access.userId, ...address },
-        select: { id: true, title: true, recipient: true, phone: true, province: true, city: true, addressLine: true, postalCode: true },
+        select: { id: true, title: true, recipient: true, phone: true, province: true, city: true, addressLine: true, buildingNumber: true, unit: true, postalCode: true },
       });
     }, { isolationLevel: "Serializable" });
     if (!saved) return Response.json({ error: "هر حساب حداکثر می‌تواند ۲۰ نشانی ذخیره کند." }, { status: 409, headers: noStore });

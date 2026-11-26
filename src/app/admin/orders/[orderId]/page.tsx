@@ -42,6 +42,8 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
       province: true,
       city: true,
       addressLine: true,
+      buildingNumber: true,
+      unit: true,
       postalCode: true,
       vendorOrders: {
         orderBy: { createdAt: "asc" },
@@ -78,12 +80,13 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
           </div>
         </header>
 
-        {order.status === "PAYMENT_REVIEW" && <section className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm font-bold leading-7 text-rose-900" role="alert">زرین‌پال پرداخت را تأیید کرده، اما سفارش خودکار به فروشنده ارجاع نشده است. موجودی/تلاش‌های پرداخت را بررسی و در صورت نیاز از پنل زرین‌پال بازپرداخت را انجام دهید؛ این سامانه هنوز بازپرداخت خودکار ندارد.</section>}
+        {order.status === "PAYMENT_REVIEW" && <section className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm font-bold leading-7 text-rose-900" role="alert">زرین‌پال پرداخت را تأیید کرده، اما سفارش خودکار به فروشنده ارجاع نشده است. مبلغ پرداخت در صفحهٔ تطبیق مالی، موجودی و تلاش‌های هم‌زمان را بررسی کنید و در صورت نیاز از پنل زرین‌پال بازپرداخت را انجام دهید؛ این سامانه هنوز بازپرداخت خودکار ندارد.</section>}
 
         <section aria-labelledby="admin-delivery-heading" className="mt-5 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
           <h2 id="admin-delivery-heading" className="font-black text-slate-900">اطلاعات تحویل</h2>
           <p className="mt-3 text-sm leading-7 text-slate-700">گیرنده: {order.recipient} · <span dir="ltr" className="inline-block">{order.phone}</span></p>
           <p className="text-sm leading-7 text-slate-700">{order.province}، {order.city}، {order.addressLine}</p>
+          {(order.buildingNumber || order.unit) && <p className="text-sm leading-7 text-slate-700">{order.buildingNumber && <>پلاک {order.buildingNumber}</>}{order.buildingNumber && order.unit && " · "}{order.unit && <>طبقه / واحد {order.unit}</>}</p>}
           <p className="text-sm text-slate-600">کد پستی: <span dir="ltr" className="inline-block font-mono">{order.postalCode}</span></p>
           <p className="mt-3 text-xs leading-6 text-slate-500">این اطلاعات فقط برای رسیدگی به تحویل سفارش در پنل مدیر نمایش داده می‌شود.</p>
         </section>

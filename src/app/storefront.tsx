@@ -75,12 +75,44 @@ const CATEGORIES: Category[] = [
   },
 ];
 
+const CATEGORY_SHOWCASE = [
+  {
+    title: "پوشاک بانوان",
+    image: "/images/category-womenswear.webp",
+    alt: "مانتو، کیف و روسری در چیدمانی روشن",
+    filterTerms: ["پوشاک بانوان", "لباس زنانه", "زنانه"],
+    demoCategory: "پوشاک",
+  },
+  {
+    title: "پوشاک مردانه",
+    image: "/images/category-menswear-v2.webp",
+    alt: "پالتوی مردانه و اکسسوری‌های پوشاک",
+    filterTerms: ["پوشاک مردانه", "لباس مردانه", "مردانه"],
+    demoCategory: "پوشاک",
+  },
+  {
+    title: "زیبایی و سلامت",
+    image: "/images/category-beauty.webp",
+    alt: "عطر، کرم و ابزار آرایشی در چیدمانی کرم و طلایی",
+    filterTerms: ["زیبایی", "سلامت"],
+    demoCategory: "زیبایی و سلامت",
+  },
+  {
+    title: "موبایل و دیجیتال",
+    image: "/images/category-electronics-v2.webp",
+    alt: "گوشی، ساعت هوشمند و هدفون",
+    filterTerms: ["دیجیتال", "موبایل", "الکترونیک"],
+    demoCategory: "الکترونیک",
+  },
+];
+
 const CATEGORY_FILTERS = [
   "همه",
   "الکترونیک",
   "پوشیدنی هوشمند",
   "پوشاک",
   "اکسسوری",
+  "زیبایی و سلامت",
 ];
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -423,6 +455,7 @@ export default function Home({
   const [cartOpen, setCartOpen] = useState(false);
 
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartAnnouncement, setCartAnnouncement] = useState("");
   const [futureItems, setFutureItems] = useState<Product[]>([]);
   const [cartLoaded, setCartLoaded] = useState(false);
 
@@ -621,6 +654,7 @@ export default function Home({
   }
 
   function addToCart(product: Product) {
+    const currentQuantity = cartItems.find((item) => item.product.id === product.id)?.quantity ?? 0;
     setCartItems((currentItems) => {
       const existingIndex = currentItems.findIndex(
         (item) => item.product.id === product.id,
@@ -640,6 +674,7 @@ export default function Home({
 
       return nextItems;
     });
+    setCartAnnouncement(`${product.name} به سبد خرید اضافه شد. تعداد: ${(currentQuantity + 1).toLocaleString("fa-IR")}.`);
   }
 
   function moveToFuture(product: Product) {
@@ -663,6 +698,7 @@ export default function Home({
 
     setFutureItems(nextFutureItems);
     setCartItems(nextCartItems);
+    setCartAnnouncement(`${product.name} به سبد خرید آینده منتقل شد.`);
   }
 
   function moveToCart(product: Product) {
@@ -690,9 +726,12 @@ export default function Home({
 
     setFutureItems(nextFutureItems);
     setCartItems(nextCartItems);
+    setCartAnnouncement(`${product.name} به سبد خرید برگشت.`);
   }
 
   function removeFromCart(product: Product) {
+    const existingItem = cartItems.find((item) => item.product.id === product.id);
+    if (!existingItem) return;
     setCartItems((currentItems) => {
       const existingIndex = currentItems.findIndex(
         (item) => item.product.id === product.id,
@@ -717,20 +756,27 @@ export default function Home({
 
       return nextItems;
     });
+    setCartAnnouncement(existingItem.quantity <= 1
+      ? `${product.name} از سبد خرید حذف شد.`
+      : `یک عدد از ${product.name} کم شد. تعداد باقی‌مانده: ${(existingItem.quantity - 1).toLocaleString("fa-IR")}.`);
   }
 
   function removeFromFuture(product: Product) {
+    if (!futureItems.some((item) => item.id === product.id)) return;
     setFutureItems((currentItems) => {
       return currentItems.filter((item) => item.id !== product.id);
     });
+    setCartAnnouncement(`${product.name} از سبد خرید آینده حذف شد.`);
   }
 
   function clearCart() {
     setCartItems([]);
+    setCartAnnouncement("سبد خرید خالی شد.");
   }
 
   function clearFutureItems() {
     setFutureItems([]);
+    setCartAnnouncement("سبد خرید آینده خالی شد.");
   }
 
   function selectCategory(category: string) {
@@ -740,10 +786,14 @@ export default function Home({
   }
 
   return (
-    <main
+    <div
       dir="rtl"
       className="market-home min-h-screen bg-slate-50 text-slate-800"
     >
+      <a href="#main-content" className="market-skip-link">
+        رفتن به محتوای اصلی
+      </a>
+      <p role="status" aria-live="polite" className="sr-only">{cartAnnouncement}</p>
       {demoMode && (
         <div className="bg-amber-100 px-4 py-2 text-center text-sm font-bold text-amber-900">
           این محصولات نمونه نمایشی‌اند؛ قیمت و موجودی واقعی نیست.
@@ -788,8 +838,14 @@ export default function Home({
             )}
 
             <Link href="/" aria-label="صفحهٔ اصلی جانان‌کده" className="flex shrink-0 items-center gap-2.5">
-              <div className="market-logo-mark flex h-11 w-11 items-center justify-center text-xl font-black text-white">
-                ج
+              <div className="market-logo-mark h-11 w-11" aria-hidden="true">
+                <Image
+                  src="/images/janankadeh-logo.webp"
+                  alt=""
+                  fill
+                  sizes="44px"
+                  className="market-logo-image"
+                />
               </div>
 
               <div className="hidden leading-tight sm:block">
@@ -938,6 +994,7 @@ export default function Home({
                               onClick={() =>
                                 moveToFuture(item.product)
                               }
+                              aria-label={`انتقال ${item.product.name} به سبد آینده`}
                               className="rounded-lg bg-amber-100 px-2 py-2 text-xs font-bold text-amber-800 hover:bg-amber-200"
                             >
                               سبد آینده
@@ -948,6 +1005,7 @@ export default function Home({
                               onClick={() =>
                                 removeFromCart(item.product)
                               }
+                              aria-label={`کاهش تعداد ${item.product.name} در سبد خرید`}
                               className="rounded-lg bg-red-100 px-2 py-2 text-xs font-bold text-red-800 hover:bg-red-200"
                             >
                               حذف
@@ -968,6 +1026,7 @@ export default function Home({
                         <button
                           type="button"
                           onClick={clearFutureItems}
+                          aria-label="خالی کردن سبد خرید آینده"
                           className="rounded-lg bg-red-100 px-3 py-2 text-xs font-bold text-red-800 hover:bg-red-200"
                         >
                           خالی کردن
@@ -1000,6 +1059,7 @@ export default function Home({
                               <button
                                 type="button"
                                 onClick={() => moveToCart(item)}
+                                aria-label={`بازگرداندن ${item.name} به سبد خرید`}
                                 className="rounded-lg bg-emerald-100 px-2 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-200"
                               >
                                 بازگشت به سبد
@@ -1010,6 +1070,7 @@ export default function Home({
                                 onClick={() =>
                                   removeFromFuture(item)
                                 }
+                                aria-label={`حذف ${item.name} از سبد آینده`}
                                 className="rounded-lg bg-red-100 px-2 py-2 text-xs font-bold text-red-800 hover:bg-red-200"
                               >
                                 حذف
@@ -1172,6 +1233,7 @@ export default function Home({
         )}
       </header>
 
+      <main id="main-content" tabIndex={-1}>
       <section className="market-hero" aria-labelledby="market-hero-title">
         <div className="market-hero-inner">
           <div className="market-hero-copy">
@@ -1180,12 +1242,12 @@ export default function Home({
             </span>
             <h1 id="market-hero-title" className="market-hero-title">
               {publicCatalogOnly && products.length === 0
-                ? <>ویترین جانان‌کده در حال آماده‌سازی است.</>
+                ? <>ویترین در حال آماده‌سازی است.</>
                 : <>هر انتخاب خوب، از <em>جانان‌کده</em> شروع می‌شود.</>}
             </h1>
             <p className="market-hero-description">
               {publicCatalogOnly && products.length === 0
-                ? "این نسخه برای مشاهدهٔ عمومی آماده است. کالاها پس از ثبت و تأیید در همین صفحه نمایش داده می‌شوند."
+                ? "نسخهٔ عمومی فعال است؛ نمایش کالاها پس از ثبت و تأیید آغاز می‌شود."
                 : "میان کالاها و فروشگاه‌های گوناگون بگرد، انتخابت را پیدا کن و خریدت را ساده‌تر پیش ببر."}
             </p>
             <div className="market-hero-actions">
@@ -1200,14 +1262,27 @@ export default function Home({
             </div>
           </div>
 
-          <div className="market-hero-art">
-            <Image
-              src="/images/marketplace-hero.png"
-              alt="چیدمانی از کالاهای دیجیتال، پوشاک و لوازم خانه"
-              fill
-              priority
-              sizes="(max-width: 640px) 100vw, (max-width: 900px) 46vw, 42vw"
-            />
+          <div className="market-hero-stage">
+            <div className="market-hero-art">
+              <Image
+                src="/images/marketplace-hero-concept-v1.webp"
+                alt="چیدمانی از کالاهای متنوع بازارگاه جانان‌کده"
+                fill
+                preload
+                sizes="(max-width: 640px) 100vw, (max-width: 900px) 46vw, 42vw"
+              />
+            </div>
+            <div className="market-hero-depth-cube" aria-hidden="true">
+              <span className="market-hero-orbit" />
+              <div className="market-hero-cube">
+                <span className="market-hero-cube-face market-hero-cube-front" />
+                <span className="market-hero-cube-face market-hero-cube-back" />
+                <span className="market-hero-cube-face market-hero-cube-right" />
+                <span className="market-hero-cube-face market-hero-cube-left" />
+                <span className="market-hero-cube-face market-hero-cube-top" />
+                <span className="market-hero-cube-face market-hero-cube-bottom" />
+              </div>
+            </div>
             <div className="market-hero-stamp">
               <strong>چند فروشگاه، یک مقصد</strong>
               <span>انتخاب‌های متنوع در جانان‌کده</span>
@@ -1231,30 +1306,53 @@ export default function Home({
         </div>
       </section>}
 
-      {products.length > 0 && (
-        <section className="market-category-section" aria-labelledby="market-category-title">
-          <div>
-            <span className="market-section-kicker">کشف جانان‌کده</span>
-            <h2 id="market-category-title" className="market-section-title">از کجا شروع کنیم؟</h2>
-          </div>
-          <div className="market-category-grid">
-            {categoryOptions.filter((category) => category.value !== "همه").slice(0, 4).map((category, index) => (
-              <button
-                key={category.value}
-                type="button"
-                onClick={() => {
-                  selectCategory(category.value);
-                  document.getElementById("products")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-                className="market-category-tile"
-              >
-                <span className="market-category-icon" aria-hidden="true">{["✦", "◈", "⌂", "✳"][index]}</span>
-                <span><strong>{category.label}</strong><small>دیدن انتخاب‌ها</small></span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+      <section className="market-category-section" aria-labelledby="market-category-title">
+        <div>
+          <span className="market-section-kicker">کشف جانان‌کده</span>
+          <h2 id="market-category-title" className="market-section-title">از کجا شروع کنیم؟</h2>
+        </div>
+        <div className="market-category-grid">
+          {CATEGORY_SHOWCASE.map((category) => (
+            <button
+              key={category.title}
+              type="button"
+              onClick={() => {
+                const matchingCategory = categoryOptions.find(
+                  (option) =>
+                    option.value !== "همه" &&
+                    category.filterTerms.some(
+                      (term) => option.label.includes(term) || option.value.includes(term),
+                    ),
+                );
+                const demoCategory = demoMode
+                  ? categoryOptions.find((option) => option.value === category.demoCategory)
+                  : undefined;
+                const categoryToSelect = matchingCategory ?? demoCategory;
+                if (categoryToSelect) selectCategory(categoryToSelect.value);
+                document.getElementById("products")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              className="market-category-tile"
+            >
+              <span className="market-category-image">
+                <Image
+                  src={category.image}
+                  alt={category.alt}
+                  fill
+                  sizes="(max-width: 640px) 48vw, (max-width: 900px) 45vw, 22vw"
+                />
+                <span className="market-category-image-shade" aria-hidden="true" />
+              </span>
+              <span className="market-category-copy">
+                <span>
+                  <strong>{category.title}</strong>
+                  <small>مرور دسته‌بندی</small>
+                </span>
+                <span className="market-category-arrow" aria-hidden="true">←</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section
         id="products"
@@ -1329,13 +1427,13 @@ export default function Home({
                 {hasActiveCatalogFilters ? "⌕" : "✦"}
               </div>
               <h3 className="text-lg font-black text-slate-900">
-                {hasActiveCatalogFilters ? "با این جست‌وجو محصولی پیدا نشد" : "هنوز کالایی برای نمایش منتشر نشده است"}
+                {hasActiveCatalogFilters ? "با این فیلترها محصولی پیدا نشد" : "هنوز کالایی برای نمایش منتشر نشده است"}
               </h3>
-              <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-600">
-                {hasActiveCatalogFilters
-                  ? "عبارت جست‌وجو یا فیلترها را تغییر بده و دوباره بررسی کن."
-                  : "ویترین عمومی آمادهٔ مشاهده است؛ کالاها پس از ثبت و تأیید در همین بخش نمایش داده می‌شوند."}
-              </p>
+              {hasActiveCatalogFilters && (
+                <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-600">
+                  عبارت جست‌وجو یا فیلترها را تغییر بده و دوباره بررسی کن.
+                </p>
+              )}
               {hasActiveCatalogFilters && (
                 <button
                   type="button"
@@ -1362,12 +1460,12 @@ export default function Home({
                 className="group overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
               >
                 <div className="market-product-media relative aspect-[4/3] overflow-hidden bg-slate-100">
-                  <Link href={product.href ?? "#products"} aria-label="مشاهده کالا" className="absolute inset-0">
+                  <Link href={product.href ?? "#products"} aria-label={`مشاهدهٔ ${product.name}`} className="absolute inset-0">
                     <Image
                       src={imageErrors[product.id] ? PLACEHOLDER_IMAGE : product.image}
                       alt={product.name || "تصویر محصول"}
                       fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                      sizes="(max-width: 1279px) 50vw, 300px"
                       className="object-contain transition duration-500 group-hover:scale-105"
                       onError={() => setImageErrors((previousErrors) => previousErrors[product.id] ? previousErrors : { ...previousErrors, [product.id]: true })}
                     />
@@ -1414,6 +1512,7 @@ export default function Home({
                       <button
                         type="button"
                         onClick={() => addToCart(product)}
+                        aria-label={product.inStock === false ? `${product.name} ناموجود` : `افزودن ${product.name} به سبد خرید`}
                         disabled={product.inStock === false}
                         className="market-add-button min-h-[40px] rounded-lg px-3 py-2 text-sm font-black disabled:cursor-not-allowed disabled:opacity-50"
                       >
@@ -1471,12 +1570,18 @@ export default function Home({
           </div>
         </section>
       )}
+      </main>
 
       <footer className="market-footer px-4 py-8 sm:py-10">
         <div className="mx-auto flex w-full max-w-[78rem] flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <Link href="/" className="font-black text-emerald-950">جانان‌کده</Link>
-            <p className="mt-1 text-xs leading-6">بازارگاه آنلاین برای پیدا کردن کالاها و فروشگاه‌های تازه.</p>
+          <div className="flex items-center gap-3">
+            <Link href="/" aria-label="صفحهٔ اصلی جانان‌کده" className="market-footer-logo">
+              <Image src="/images/janankadeh-logo.webp" alt="" fill sizes="56px" />
+            </Link>
+            <div>
+              <Link href="/" className="font-black text-emerald-950">جانان‌کده</Link>
+              <p className="mt-1 text-xs leading-6">بازارگاه آنلاین برای پیدا کردن کالاها و فروشگاه‌های تازه.</p>
+            </div>
           </div>
           <nav aria-label="پیوندهای پایانی" className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
             <a href="#products" className="transition hover:text-emerald-900">محصولات</a>
@@ -1485,6 +1590,6 @@ export default function Home({
           </nav>
         </div>
       </footer>
-    </main>
+    </div>
   );
 }

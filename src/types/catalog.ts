@@ -13,6 +13,12 @@ export interface PublicCatalogProduct {
 
 export interface PublicProductDetails extends PublicCatalogProduct {
   description: string;
+  brandName: string | null;
+  productType: string | null;
+  modelCode: string | null;
+  originCountry: string | null;
+  warrantyDescription: string | null;
+  specificationsText: string | null;
   images: Array<{ url: string; altText: string }>;
 }
 

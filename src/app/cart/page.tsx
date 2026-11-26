@@ -2,14 +2,14 @@ import { auth } from "@/auth";
 import Link from "next/link";
 import { getPrisma } from "@/lib/prisma";
 import { isLiveCheckoutGateEnabled } from "@/lib/marketplace-config";
-import { isPaymentAvailable, isProductionCheckoutConfigured } from "@/lib/payment-config";
+import { isProductionCheckoutConfigured, isPaymentAvailable } from "@/lib/payment-config";
 import type { SavedAddress } from "@/types/address";
 import CartReview from "./cart-review";
 
 export const metadata = { title: "بازبینی سبد خرید | جانان‌کده" };
 
 export default async function CartPage() {
-  if (!isLiveCheckoutGateEnabled()) {
+  if (!isProductionCheckoutConfigured()) {
     return (
       <main dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10">
         <section className="w-full max-w-xl rounded-3xl border border-slate-100 bg-white p-7 text-center shadow-sm sm:p-10">
@@ -28,16 +28,18 @@ export default async function CartPage() {
 
   const session = await auth();
   const isAuthenticated = Boolean(session?.user?.id && session.user.status === "ACTIVE");
+  const isCustomer = Boolean(isAuthenticated && session?.user?.role === "CUSTOMER");
   let savedAddresses: SavedAddress[] = [];
-  if (isAuthenticated && session?.user?.id) {
+  if (isCustomer && session?.user?.id) {
     savedAddresses = await getPrisma().address.findMany({
       where: { userId: session.user.id }, orderBy: { createdAt: "desc" }, take: 20,
-      select: { id: true, title: true, recipient: true, phone: true, province: true, city: true, addressLine: true, postalCode: true },
+      select: { id: true, title: true, recipient: true, phone: true, province: true, city: true, addressLine: true, buildingNumber: true, unit: true, postalCode: true },
     });
   }
   return (
     <CartReview
       isAuthenticated={isAuthenticated}
+      isCustomer={isCustomer}
       savedAddresses={savedAddresses}
       checkoutEnabled={isProductionCheckoutConfigured()}
       liveCheckoutGateEnabled={isLiveCheckoutGateEnabled()}

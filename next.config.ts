@@ -2,6 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingIncludes: {
+    "/*": [
+      "./node_modules/sharp/**/*",
+      "./node_modules/@img/sharp-*/**/*",
+      "./node_modules/@img/sharp-libvips-*/**/*",
+    ],
+  },
   poweredByHeader: false,
   experimental: {
     sri: { algorithm: "sha256" },
@@ -27,6 +34,7 @@ const nextConfig: NextConfig = {
     return [{ source: "/:path*", headers }];
   },
   images: {
+    formats: ["image/avif", "image/webp"],
     remotePatterns: [
       {
         protocol: "https",

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/prisma";
 import { checkAccountRateLimit } from "@/lib/rate-limit";
+import { ORDER_RESERVATION_MAX_AGE_MS } from "@/lib/order-reservations";
 import { recordVerifiedPaymentCapture } from "@/lib/financial-ledger";
 import { enqueueOrderSmsNotification } from "@/lib/sms-outbox";
 import { getZarinpalConfiguration, verifyZarinpalPayment, ZARINPAL_PROVIDER } from "@/lib/zarinpal";
@@ -11,7 +12,6 @@ const noStore = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" 
 const AUTHORITY_PATTERN = /^[A-Za-z0-9]{16,80}$/;
 const CLAIM_STALE_MS = 60_000;
 const CALLBACK_GRACE_MS = 2 * 60_000;
-const MAX_RESERVATION_AGE_MS = 30 * 60_000;
 
 function orderRedirect(siteOrigin: string, orderId: string | null, result: "success" | "failed" | "processing" | "review") {
   const destination = orderId
@@ -19,6 +19,28 @@ function orderRedirect(siteOrigin: string, orderId: string | null, result: "succ
     : new URL("/account/orders", siteOrigin);
   destination.searchParams.set("payment", result);
   return new Response(null, { status: 303, headers: { ...noStore, Location: destination.toString() } });
+}
+
+function settledOrderResult(
+  orderStatus: string,
+  hasProviderTransactionId: boolean,
+  paymentAmountMatchesOrder: boolean,
+): "success" | "review" {
+  return hasProviderTransactionId && paymentAmountMatchesOrder && ["PAID", "PROCESSING", "SHIPPED", "DELIVERED"].includes(orderStatus)
+    ? "success"
+    : "review";
+}
+
+async function flagOrderForPaymentReview(tx: Prisma.TransactionClient, orderId: string) {
+  const updated = await tx.order.updateMany({
+    where: { id: orderId, status: { not: "PAYMENT_REVIEW" } },
+    data: { status: "PAYMENT_REVIEW", paymentExpiresAt: null },
+  });
+  if (updated.count === 1) {
+    await tx.adminAuditEvent.create({
+      data: { action: "ZARINPAL_PAYMENT_REQUIRES_REVIEW", targetType: "ORDER", targetId: orderId },
+    });
+  }
 }
 
 async function lockPaymentAndOrder(tx: Prisma.TransactionClient, paymentId: string, orderId: string) {
@@ -57,14 +79,25 @@ export async function GET(request: Request) {
         await lockPaymentAndOrder(tx, found.id, found.orderId);
         const payment = await tx.payment.findUnique({
           where: { id: found.id },
-          select: { id: true, orderId: true, provider: true, amountToman: true, status: true },
+          select: { id: true, orderId: true, provider: true, amountToman: true, status: true, providerTransactionId: true },
         });
         if (!payment || payment.status !== "SUCCEEDED") return null;
         await recordVerifiedPaymentCapture(tx, payment);
-        const order = await tx.order.findUnique({ where: { id: found.orderId }, select: { status: true } });
-        return order?.status ?? null;
+        const order = await tx.order.findUnique({ where: { id: found.orderId }, select: { status: true, totalToman: true } });
+        if (!order) return null;
+        const hasProviderTransactionId = Boolean(payment.providerTransactionId);
+        const paymentAmountMatchesOrder = payment.amountToman === order.totalToman;
+        if (!hasProviderTransactionId || !paymentAmountMatchesOrder) {
+          await flagOrderForPaymentReview(tx, found.orderId);
+          return { status: "PAYMENT_REVIEW", hasProviderTransactionId, paymentAmountMatchesOrder };
+        }
+        return { status: order.status, hasProviderTransactionId, paymentAmountMatchesOrder };
       }, { isolationLevel: "Serializable", timeout: 10_000 });
-      return orderStatus === null ? orderUrl("processing") : orderUrl(orderStatus === "PAYMENT_REVIEW" ? "review" : "success");
+      return orderUrl(orderStatus === null ? "processing" : settledOrderResult(
+        orderStatus.status,
+        orderStatus.hasProviderTransactionId,
+        orderStatus.paymentAmountMatchesOrder,
+      ));
     } catch {
       return orderUrl("processing");
     }
@@ -73,22 +106,35 @@ export async function GET(request: Request) {
 
   const now = new Date();
   const staleBefore = new Date(now.getTime() - CLAIM_STALE_MS);
-  type Claim = { kind: "claimed"; amountToman: number; claimedAt: Date } | { kind: "busy" | "finished" | "missing" };
+  type Claim =
+    | { kind: "claimed"; amountToman: number; claimedAt: Date }
+    | { kind: "settled"; result: "success" | "failed" | "review" }
+    | { kind: "busy" | "missing" };
   let claim: Claim;
   try {
     claim = await prisma.$transaction(async (tx): Promise<Claim> => {
       await lockPaymentAndOrder(tx, found.id, found.orderId);
       const payment = await tx.payment.findUnique({
         where: { id: found.id },
-        select: { provider: true, providerReference: true, amountToman: true, status: true, verificationStartedAt: true },
+        select: { provider: true, providerReference: true, providerTransactionId: true, amountToman: true, status: true, verificationStartedAt: true },
       });
       const order = await tx.order.findUnique({
         where: { id: found.orderId },
-        select: { status: true, createdAt: true, paymentExpiresAt: true },
+        select: { status: true, totalToman: true, createdAt: true, paymentExpiresAt: true },
       });
       if (!payment || !order || payment.provider !== ZARINPAL_PROVIDER || payment.providerReference !== authority) return { kind: "missing" };
-      if (payment.status === "SUCCEEDED" || payment.status === "REFUNDED") return { kind: "finished" };
-      if (payment.status !== "PENDING" && payment.status !== "FAILED") return { kind: "finished" };
+      if (payment.status === "SUCCEEDED") {
+        await recordVerifiedPaymentCapture(tx, { id: found.id, orderId: found.orderId, provider: payment.provider, amountToman: payment.amountToman });
+        const hasProviderTransactionId = Boolean(payment.providerTransactionId);
+        const paymentAmountMatchesOrder = payment.amountToman === order.totalToman;
+        if (!hasProviderTransactionId || !paymentAmountMatchesOrder) await flagOrderForPaymentReview(tx, found.orderId);
+        return {
+          kind: "settled",
+          result: settledOrderResult(order.status, hasProviderTransactionId, paymentAmountMatchesOrder),
+        };
+      }
+      if (payment.status === "REFUNDED") return { kind: "settled", result: "failed" };
+      if (payment.status !== "PENDING" && payment.status !== "FAILED") return { kind: "settled", result: "failed" };
       if (payment.verificationStartedAt && payment.verificationStartedAt > staleBefore) return { kind: "busy" };
 
       const claimedAt = new Date();
@@ -96,7 +142,7 @@ export async function GET(request: Request) {
 
       if (order.status === "PENDING_PAYMENT" && order.paymentExpiresAt) {
         const graceEnd = new Date(claimedAt.getTime() + CALLBACK_GRACE_MS);
-        const hardEnd = new Date(order.createdAt.getTime() + MAX_RESERVATION_AGE_MS);
+        const hardEnd = new Date(order.createdAt.getTime() + ORDER_RESERVATION_MAX_AGE_MS);
         const extendedUntil = graceEnd < hardEnd ? graceEnd : hardEnd;
         if (extendedUntil > order.paymentExpiresAt) {
           await tx.order.update({ where: { id: found.orderId }, data: { paymentExpiresAt: extendedUntil } });
@@ -109,7 +155,8 @@ export async function GET(request: Request) {
   }
 
   if (claim.kind !== "claimed") {
-    return orderUrl(claim.kind === "busy" ? "processing" : "failed");
+    if (claim.kind === "busy") return orderUrl("processing");
+    return orderUrl(claim.kind === "settled" ? claim.result : "failed");
   }
 
   const verified = await verifyZarinpalPayment({ configuration, authority, amountToman: claim.amountToman });
@@ -133,36 +180,41 @@ export async function GET(request: Request) {
   try {
     const result = await prisma.$transaction(async (tx) => {
       await lockPaymentAndOrder(tx, found.id, found.orderId);
-      const payment = await tx.payment.findUnique({ where: { id: found.id }, select: { id: true, status: true, orderId: true, provider: true, amountToman: true, verificationStartedAt: true } });
+      const payment = await tx.payment.findUnique({ where: { id: found.id }, select: { id: true, status: true, orderId: true, provider: true, providerTransactionId: true, amountToman: true, verificationStartedAt: true } });
       const order = await tx.order.findUnique({
         where: { id: found.orderId },
         select: {
           status: true,
+          totalToman: true,
           vendorOrders: { select: { id: true, items: { select: { productId: true, quantity: true } } } },
         },
       });
       if (!payment || !order) return "failed" as const;
       if (payment.status === "SUCCEEDED") {
         await recordVerifiedPaymentCapture(tx, payment);
-        return order.status === "PAYMENT_REVIEW" ? "review" as const : "success" as const;
+        const hasProviderTransactionId = Boolean(payment.providerTransactionId);
+        const paymentAmountMatchesOrder = payment.amountToman === order.totalToman;
+        if (!hasProviderTransactionId || !paymentAmountMatchesOrder) await flagOrderForPaymentReview(tx, found.orderId);
+        return settledOrderResult(order.status, hasProviderTransactionId, paymentAmountMatchesOrder);
       }
       if (payment.status !== "PENDING" && payment.status !== "FAILED") return "failed" as const;
 
       const otherPotentialPayments = await tx.payment.count({
         where: { orderId: found.orderId, id: { not: found.id }, status: { in: ["PENDING", "SUCCEEDED"] } },
       });
-      if (otherPotentialPayments > 0 || order.status === "PAYMENT_REVIEW" || (order.status !== "PENDING_PAYMENT" && order.status !== "CANCELLED")) {
+      if (
+        verified.transactionId === null ||
+        payment.amountToman !== order.totalToman ||
+        otherPotentialPayments > 0 ||
+        order.status === "PAYMENT_REVIEW" ||
+        (order.status !== "PENDING_PAYMENT" && order.status !== "CANCELLED")
+      ) {
         await tx.payment.update({
           where: { id: found.id },
           data: { status: "SUCCEEDED", providerTransactionId: verified.transactionId, verifiedAt, verificationStartedAt: null },
         });
         await recordVerifiedPaymentCapture(tx, payment);
-        if (order.status !== "PAYMENT_REVIEW") {
-          await tx.order.update({ where: { id: found.orderId }, data: { status: "PAYMENT_REVIEW", paymentExpiresAt: null } });
-          await tx.adminAuditEvent.create({
-            data: { action: "ZARINPAL_PAYMENT_REQUIRES_REVIEW", targetType: "ORDER", targetId: found.orderId },
-          });
-        }
+        await flagOrderForPaymentReview(tx, found.orderId);
         return "review" as const;
       }
 
@@ -221,12 +273,7 @@ export async function GET(request: Request) {
           data: { status: "SUCCEEDED", providerTransactionId: verified.transactionId, verifiedAt, verificationStartedAt: null },
         });
         await recordVerifiedPaymentCapture(tx, payment);
-        if (order.status !== "PAYMENT_REVIEW") {
-          await tx.order.update({ where: { id: found.orderId }, data: { status: "PAYMENT_REVIEW", paymentExpiresAt: null } });
-          await tx.adminAuditEvent.create({
-            data: { action: "ZARINPAL_PAYMENT_REQUIRES_REVIEW", targetType: "ORDER", targetId: found.orderId },
-          });
-        }
+        await flagOrderForPaymentReview(tx, found.orderId);
       }, { isolationLevel: "Serializable", timeout: 10_000 });
       return orderUrl("review");
     } catch {

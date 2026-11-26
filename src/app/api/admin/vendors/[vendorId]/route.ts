@@ -3,6 +3,7 @@ import { getPrisma } from "@/lib/prisma";
 import { readRequestBody } from "@/lib/request-body";
 import { recordAdminAuditEvent } from "@/lib/admin-audit";
 import { isVendorApprovalEnabled } from "@/lib/marketplace-config";
+import { getCurrentVendorAgreement } from "@/lib/vendor-agreement";
 
 export const runtime = "nodejs";
 const noStore = { "Cache-Control": "no-store" };
@@ -13,7 +14,7 @@ export async function PATCH(
 ) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: "ورود لازم است." }, { status: 401, headers: noStore });
-  if (session.user.status !== "ACTIVE" || session.user.role !== "ADMIN") {
+  if (session.user.status !== "ACTIVE" || session.user.role !== "ADMIN" || session.user.mfaVerified !== true) {
     return Response.json({ error: "دسترسی مدیر لازم است." }, { status: 403, headers: noStore });
   }
 
@@ -47,8 +48,15 @@ export async function PATCH(
   if (action !== "approve" && action !== "reject") {
     return Response.json({ error: "عملیات مدیر معتبر نیست." }, { status: 400, headers: noStore });
   }
+  let agreement: Awaited<ReturnType<typeof getCurrentVendorAgreement>> = null;
   if (action === "approve" && !isVendorApprovalEnabled()) {
     return Response.json({ error: "تأیید فروشندگان در تولید تا آماده‌شدن قرارداد و بررسی‌های لازم غیرفعال است." }, { status: 503, headers: noStore });
+  }
+  if (action === "approve") {
+    agreement = await getCurrentVendorAgreement();
+    if (!agreement) {
+      return Response.json({ error: "نسخهٔ نهایی قرارداد فروشنده در دسترس نیست؛ تأیید فروشگاه بسته است." }, { status: 503, headers: noStore });
+    }
   }
 
   const { vendorId } = await params;
@@ -65,6 +73,17 @@ export async function PATCH(
       if (!vendor || vendor.status !== "PENDING") return null;
 
       if (action === "approve") {
+        const acceptance = await tx.vendorAgreementAcceptance.findFirst({
+          where: {
+            userId: vendor.userId,
+            vendorProfileId: vendor.id,
+            contractVersion: agreement!.version,
+            documentSha256: agreement!.documentSha256,
+          },
+          select: { id: true },
+        });
+        if (!acceptance) return { error: "agreement-not-accepted" as const };
+
         const applicant = await tx.user.findFirst({
           where: { id: vendor.userId, role: "CUSTOMER", status: "ACTIVE", emailVerified: { not: null } },
           select: { id: true },
@@ -91,6 +110,9 @@ export async function PATCH(
     });
 
     if (!result) return Response.json({ error: "درخواست در انتظار بررسی پیدا نشد." }, { status: 409, headers: noStore });
+    if ("error" in result) {
+      return Response.json({ error: "پذیرش نسخهٔ جاری قرارداد در پروندهٔ این فروشگاه ثبت نشده است." }, { status: 409, headers: noStore });
+    }
     return Response.json(result, { headers: noStore });
   } catch (error) {
     console.error("Vendor application review failed.", error);

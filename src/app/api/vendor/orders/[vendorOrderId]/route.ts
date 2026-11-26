@@ -44,11 +44,35 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ve
       });
       if (!vendor) return { error: "فروشگاه فعال پیدا نشد.", httpStatus: 403 } as const;
 
+      const vendorOrderReference = await tx.vendorOrder.findFirst({
+        where: { id: vendorOrderId, vendorId: vendor.id },
+        select: { orderId: true },
+      });
+      if (!vendorOrderReference) return { error: "سفارش این فروشگاه پیدا نشد.", httpStatus: 404 } as const;
+
+      await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Order" WHERE "id" = ${vendorOrderReference.orderId} FOR UPDATE`;
+
       const vendorOrder = await tx.vendorOrder.findFirst({
         where: { id: vendorOrderId, vendorId: vendor.id },
-        select: { id: true, status: true, orderId: true, order: { select: { status: true } } },
+        select: { id: true, status: true, orderId: true, order: { select: { status: true, totalToman: true } } },
       });
       if (!vendorOrder) return { error: "سفارش این فروشگاه پیدا نشد.", httpStatus: 404 } as const;
+      const verifiedCapture = await tx.payment.findFirst({
+        where: {
+          orderId: vendorOrder.orderId,
+          provider: "ZARINPAL",
+          status: "SUCCEEDED",
+          providerTransactionId: { not: null },
+          amountToman: vendorOrder.order.totalToman,
+        },
+        select: { id: true },
+      });
+      const activeOrCapturedPaymentCount = await tx.payment.count({
+        where: { orderId: vendorOrder.orderId, provider: "ZARINPAL", status: { in: ["PENDING", "SUCCEEDED"] } },
+      });
+      if (!verifiedCapture || activeOrCapturedPaymentCount !== 1) {
+        return { error: "پرداخت این سفارش نیازمند بررسی مالی است و فعلاً امکان آماده‌سازی یا ارسال ندارد.", httpStatus: 409 } as const;
+      }
       if (vendorOrder.order.status !== "PAID" && vendorOrder.order.status !== "PROCESSING") {
         return { error: "فقط سفارش پرداخت‌شده قابل آماده‌سازی است.", httpStatus: 409 } as const;
       }

@@ -9,7 +9,7 @@ const noStore = { "Cache-Control": "no-store" };
 export async function PATCH(request: Request, { params }: { params: Promise<{ productId: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: "ورود لازم است." }, { status: 401, headers: noStore });
-  if (session.user.status !== "ACTIVE" || session.user.role !== "ADMIN") return Response.json({ error: "دسترسی مدیر لازم است." }, { status: 403, headers: noStore });
+  if (session.user.status !== "ACTIVE" || session.user.role !== "ADMIN" || session.user.mfaVerified !== true) return Response.json({ error: "دسترسی مدیر لازم است." }, { status: 403, headers: noStore });
   if (process.env.NODE_ENV === "production" && !process.env.AUTH_URL) return Response.json({ error: "نشانی رسمی سایت پیکربندی نشده است." }, { status: 503, headers: noStore });
   try {
     const origin = request.headers.get("origin");
@@ -35,6 +35,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ pr
   if (!/^[a-zA-Z0-9_-]{1,40}$/.test(productId)) return Response.json({ error: "شناسهٔ کالا معتبر نیست." }, { status: 400, headers: noStore });
   try {
     const result = await getPrisma().$transaction(async (tx) => {
+      if (action === "approve") {
+        const pendingProduct = await tx.product.findFirst({ where: { id: productId, status: "PENDING_REVIEW" }, select: { vendorId: true, sellerContentAttestedAt: true } });
+        if (!pendingProduct) return null;
+        if (!pendingProduct.sellerContentAttestedAt) return { error: "missing-attestation" as const };
+        await tx.$queryRaw`SELECT "id" FROM "VendorProfile" WHERE "id" = ${pendingProduct.vendorId} FOR UPDATE`;
+        const [readyImages, unfinishedImages] = await Promise.all([
+          tx.productImage.count({ where: { productId, storageReady: true, storageDeleting: false, url: { startsWith: "/api/product-images/" } } }),
+          tx.productImage.count({ where: { productId, OR: [{ storageReady: false }, { storageDeleting: true }], url: { startsWith: "/api/product-images/" } } }),
+        ]);
+        if (readyImages === 0) return { error: "missing-image" as const };
+        if (unfinishedImages) return { error: "unfinished-images" as const };
+      }
       const updated = await tx.product.updateMany({
         where: { id: productId, status: "PENDING_REVIEW" },
         data: { status: action === "approve" ? "ACTIVE" : "REJECTED", reviewNote: action === "reject" ? note : null },
@@ -50,6 +62,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ pr
       return { status: action === "approve" ? "ACTIVE" : "REJECTED" };
     });
     if (!result) return Response.json({ error: "کالای در انتظار بررسی پیدا نشد." }, { status: 409, headers: noStore });
+    if ("error" in result) {
+      if (result.error === "missing-attestation") return Response.json({ error: "برای انتشار، ابتدا اظهار مجازبودن محتوای فروشنده باید ثبت شود." }, { status: 409, headers: noStore });
+      if (result.error === "missing-image") return Response.json({ error: "برای انتشار، دست‌کم یک تصویر کامل و بارگذاری‌شده لازم است." }, { status: 409, headers: noStore });
+      return Response.json({ error: "برای انتشار، ابتدا تصویرهای رزروشدهٔ ناقص را حذف کنید یا بارگذاری آن‌ها را کامل کنید." }, { status: 409, headers: noStore });
+    }
     return Response.json(result, { headers: noStore });
   } catch (error) {
     console.error("Product review failed.", error);

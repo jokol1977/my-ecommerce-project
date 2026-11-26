@@ -6,7 +6,7 @@ import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { getPublicProduct, hasCatalogDatabaseConfiguration } from "@/lib/catalog";
-import { isLiveCheckoutGateEnabled } from "@/lib/marketplace-config";
+import { isProductionCheckoutConfigured } from "@/lib/payment-config";
 import { getPrisma } from "@/lib/prisma";
 import AddToCartButton from "./add-to-cart-button";
 import ReviewForm from "./review-form";
@@ -51,7 +51,7 @@ async function ProductContent({ params }: ProductRouteProps) {
   if (!product) notFound();
 
   const session = await auth();
-  const checkoutEnabled = isLiveCheckoutGateEnabled();
+  const checkoutEnabled = isProductionCheckoutConfigured();
   const customerId = session?.user?.id && session.user.status === "ACTIVE" && session.user.role === "CUSTOMER"
     ? session.user.id
     : null;
@@ -91,7 +91,7 @@ async function ProductContent({ params }: ProductRouteProps) {
         <article className="grid gap-8 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-8 lg:grid-cols-2">
           <div className="relative aspect-square overflow-hidden rounded-2xl bg-slate-100">
             {product.image ? (
-              <Image src={product.image.url} alt={product.image.altText || product.name} fill priority sizes="(max-width: 1024px) 100vw, 50vw" className="object-contain" />
+              <Image src={product.image.url} alt={product.image.altText || product.name} fill preload sizes="(max-width: 639px) calc(100vw - 4.5rem), (max-width: 1023px) calc(100vw - 6rem), 528px" className="object-contain" />
             ) : (
               <div className="flex h-full items-center justify-center text-slate-400">تصویری برای این کالا ثبت نشده است</div>
             )}
@@ -103,6 +103,12 @@ async function ProductContent({ params }: ProductRouteProps) {
             <p className="mt-5 text-sm text-slate-600">
               فروشنده: <Link href={`/stores/${encodeURIComponent(product.vendor.slug)}`} className="font-bold text-slate-900 hover:text-blue-700 hover:underline">{product.vendor.storeName}</Link>
             </p>
+            {(product.brandName || product.productType || product.modelCode || product.originCountry) && <dl className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
+              {product.brandName && <div><dt className="font-bold text-slate-500">برند یا سازنده</dt><dd className="mt-1 text-slate-800">{product.brandName}</dd></div>}
+              {product.productType && <div><dt className="font-bold text-slate-500">نوع کالا</dt><dd className="mt-1 text-slate-800">{product.productType}</dd></div>}
+              {product.modelCode && <div><dt className="font-bold text-slate-500">مدل یا کد سازنده</dt><dd className="mt-1 text-slate-800">{product.modelCode}</dd></div>}
+              {product.originCountry && <div><dt className="font-bold text-slate-500">کشور سازنده</dt><dd className="mt-1 text-slate-800">{product.originCountry}</dd></div>}
+            </dl>}
             <p className={`mt-4 text-sm font-bold ${product.inStock ? "text-emerald-700" : "text-slate-500"}`}>
               {product.inStock ? (checkoutEnabled ? "موجود و آماده سفارش" : "موجود") : "فعلاً ناموجود"}
             </p>
@@ -132,6 +138,8 @@ async function ProductContent({ params }: ProductRouteProps) {
               <p className="mt-3 whitespace-pre-wrap text-sm leading-8 text-slate-600">
                 {product.description || "توضیحات بیشتری برای این کالا ثبت نشده است."}
               </p>
+              {product.specificationsText && <div className="mt-5"><h3 className="font-bold text-slate-800">ویژگی‌های کالا</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-8 text-slate-600">{product.specificationsText}</p></div>}
+              {product.warrantyDescription && <p className="mt-5 rounded-xl bg-blue-50 p-4 text-sm leading-7 text-blue-900"><span className="font-bold">گارانتی اعلام‌شده:</span> {product.warrantyDescription}</p>}
             </section>
           </div>
         </article>

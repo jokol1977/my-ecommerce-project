@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import type { StorefrontProduct } from "@/types/catalog";
 import type { SavedAddress } from "@/types/address";
 import { MIN_ORDER_TOTAL_TOMAN } from "@/lib/money";
+import IranianDigitField from "@/components/iranian-digit-field";
+import IranLocationFields from "@/app/account/addresses/iran-location-fields";
 
 const CART_STORAGE_KEY = "janankadeh-cart";
 
@@ -22,7 +24,7 @@ type QuoteLine = {
 };
 type Quote = { lines: QuoteLine[]; totalToman: number; totalExceedsLimit: boolean; canContinue: boolean; quotedAt: string };
 type DeliveryAddress = Omit<SavedAddress, "id" | "title">;
-const emptyAddress: DeliveryAddress = { recipient: "", phone: "", province: "", city: "", addressLine: "", postalCode: "" };
+const emptyAddress: DeliveryAddress = { recipient: "", phone: "", province: "", city: "", addressLine: "", buildingNumber: null, unit: null, postalCode: "" };
 
 function formatPrice(value: number) {
   return new Intl.NumberFormat("fa-IR").format(value);
@@ -44,7 +46,7 @@ function readCart(): CartItem[] {
   }
 }
 
-export default function CartReview({ isAuthenticated, savedAddresses, checkoutEnabled, liveCheckoutGateEnabled, paymentConfigured }: { isAuthenticated: boolean; savedAddresses: SavedAddress[]; checkoutEnabled: boolean; liveCheckoutGateEnabled: boolean; paymentConfigured: boolean }) {
+export default function CartReview({ isAuthenticated, isCustomer, savedAddresses, checkoutEnabled, liveCheckoutGateEnabled, paymentConfigured }: { isAuthenticated: boolean; isCustomer: boolean; savedAddresses: SavedAddress[]; checkoutEnabled: boolean; liveCheckoutGateEnabled: boolean; paymentConfigured: boolean }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [quote, setQuote] = useState<{ key: string; data: Quote } | null>(null);
@@ -276,10 +278,10 @@ export default function CartReview({ isAuthenticated, savedAddresses, checkoutEn
                   </div>
                 </div>
                 <div className="mt-4 flex items-center gap-3">
-                  <button type="button" aria-label="یک عدد کم کن" onClick={() => changeQuantity(line.productId, -1)} className="h-9 w-9 rounded-lg bg-slate-100 font-black">−</button>
+                  <button type="button" aria-label={`کاهش تعداد ${line.name ?? "کالا"}`} onClick={() => changeQuantity(line.productId, -1)} className="h-9 w-9 rounded-lg bg-slate-100 font-black">−</button>
                   <span className="min-w-8 text-center font-bold">{formatPrice(line.quantity)}</span>
-                  <button type="button" aria-label="یک عدد اضافه کن" onClick={() => changeQuantity(line.productId, 1)} disabled={line.quantity >= 99} className="h-9 w-9 rounded-lg bg-slate-100 font-black disabled:opacity-50">+</button>
-                  <button type="button" onClick={() => setItems((current) => current.filter((item) => item.product.id !== line.productId))} className="mr-auto text-sm font-bold text-rose-700">حذف</button>
+                  <button type="button" aria-label={`افزایش تعداد ${line.name ?? "کالا"}`} onClick={() => changeQuantity(line.productId, 1)} disabled={line.quantity >= 99} className="h-9 w-9 rounded-lg bg-slate-100 font-black disabled:opacity-50">+</button>
+                  <button type="button" aria-label={`حذف ${line.name ?? "کالا"} از سبد خرید`} onClick={() => setItems((current) => current.filter((item) => item.product.id !== line.productId))} className="mr-auto text-sm font-bold text-rose-700">حذف</button>
                 </div>
               </article>
             ))}
@@ -294,6 +296,8 @@ export default function CartReview({ isAuthenticated, savedAddresses, checkoutEn
                   <h2 className="text-lg font-black text-slate-900">نشانی تحویل</h2>
                   {!isAuthenticated ? (
                     <p className="mt-3 text-sm leading-7 text-slate-600">برای ثبت سفارش ابتدا <Link href="/login" className="font-black text-blue-700 underline">وارد حساب کاربری</Link> شوید.</p>
+                  ) : !isCustomer ? (
+                    <p className="mt-3 text-sm leading-7 text-slate-600">برای ثبت سفارش باید با یک حساب فعال خریدار وارد شوید.</p>
                   ) : (
                     <>
                       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -301,17 +305,26 @@ export default function CartReview({ isAuthenticated, savedAddresses, checkoutEn
                           const id = event.target.value;
                           setSelectedAddressId(id);
                           const selected = savedAddresses.find((item) => item.id === id);
-                          setAddress(selected ? { recipient: selected.recipient, phone: selected.phone, province: selected.province, city: selected.city, addressLine: selected.addressLine, postalCode: selected.postalCode } : emptyAddress);
+                          setAddress(selected ? { recipient: selected.recipient, phone: selected.phone, province: selected.province, city: selected.city, addressLine: selected.addressLine, buildingNumber: selected.buildingNumber, unit: selected.unit, postalCode: selected.postalCode } : emptyAddress);
                         }} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 font-normal"><option value="">ثبت نشانی تازه</option>{savedAddresses.map((item) => <option key={item.id} value={item.id}>{item.title} — {item.province}، {item.city}</option>)}</select></label>
                         <Link href="/account/addresses" className="mt-5 text-sm font-bold text-blue-700 underline">مدیریت دفترچهٔ نشانی‌ها</Link>
                       </div>
                       <div className="mt-4 grid gap-4 sm:grid-cols-2">
                         <label className="text-sm font-bold">نام تحویل‌گیرنده<input name="recipient" required minLength={2} maxLength={120} autoComplete="name" value={address.recipient} onChange={(event) => updateAddress("recipient", event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 font-normal" /></label>
-                        <label className="text-sm font-bold">شمارهٔ موبایل<input name="phone" required type="tel" maxLength={24} autoComplete="tel" value={address.phone} onChange={(event) => updateAddress("phone", event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-left font-normal" dir="ltr" /></label>
-                        <label className="text-sm font-bold">استان<input name="province" required minLength={2} maxLength={100} autoComplete="address-level1" value={address.province} onChange={(event) => updateAddress("province", event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 font-normal" /></label>
-                        <label className="text-sm font-bold">شهر<input name="city" required minLength={2} maxLength={100} autoComplete="address-level2" value={address.city} onChange={(event) => updateAddress("city", event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 font-normal" /></label>
+                        <IranianDigitField label="شمارهٔ موبایل" name="phone" value={address.phone} onChange={(value) => updateAddress("phone", value)} autoComplete="tel" />
+                        <IranLocationFields
+                          province={address.province}
+                          city={address.city}
+                          onProvinceChange={(value) => {
+                            setSelectedAddressId("");
+                            setAddress((current) => ({ ...current, province: value, city: "" }));
+                          }}
+                          onCityChange={(value) => updateAddress("city", value)}
+                        />
                         <label className="text-sm font-bold sm:col-span-2">نشانی کامل<input name="addressLine" required minLength={8} maxLength={1000} autoComplete="street-address" value={address.addressLine} onChange={(event) => updateAddress("addressLine", event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 font-normal" /></label>
-                        <label className="text-sm font-bold">کد پستی ۱۰ رقمی<input name="postalCode" required inputMode="numeric" minLength={10} maxLength={10} autoComplete="postal-code" value={address.postalCode} onChange={(event) => updateAddress("postalCode", event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 font-normal" /></label>
+                        <label className="text-sm font-bold">شمارهٔ پلاک<input name="buildingNumber" maxLength={40} value={address.buildingNumber ?? ""} onChange={(event) => updateAddress("buildingNumber", event.target.value || null)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 font-normal" /></label>
+                        <label className="text-sm font-bold">طبقه / واحد<input name="unit" maxLength={40} value={address.unit ?? ""} onChange={(event) => updateAddress("unit", event.target.value || null)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 font-normal" /></label>
+                        <IranianDigitField label="کد پستی ۱۰ رقمی" name="postalCode" value={address.postalCode} onChange={(value) => updateAddress("postalCode", value)} autoComplete="postal-code" />
                       </div>
                       {orderError && <p role="alert" className="mt-4 rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-800">{orderError}</p>}
                       <p className="mt-4 text-xs leading-6 text-slate-500">پس از ثبت سفارش، جزئیات آن نمایش داده می‌شود. اگر زرین‌پال برای این محیط پیکربندی شده باشد، پرداخت از صفحهٔ سفارش آغاز می‌شود؛ موجودی سفارش‌های پرداخت‌نشده حداکثر ۲۰ دقیقه رزرو می‌ماند.</p>

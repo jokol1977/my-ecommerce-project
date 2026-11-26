@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { getPrisma } from "@/lib/prisma";
-import { parseProductInput } from "@/lib/product-input";
+import { isSellerSkuConflict, parseProductInput } from "@/lib/product-input";
 import { readRequestBody } from "@/lib/request-body";
 import { limitVendorCatalogWrites } from "@/lib/vendor-catalog-write-rate-limit";
 
@@ -39,11 +39,34 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ pr
     if (!category) return Response.json({ error: "دسته‌بندی فعال پیدا نشد." }, { status: 400, headers: noStore });
     const updated = await prisma.product.updateMany({
       where: { id: productId, vendorId: vendor.id, status: { in: ["REJECTED", "DRAFT"] } },
-      data: { ...input, categoryId: category.id, status: "PENDING_REVIEW", reviewNote: null },
+      data: {
+        name: input.name,
+        description: input.description,
+        brandName: input.brandName,
+        productType: input.productType,
+        modelCode: input.modelCode,
+        sellerSku: input.sellerSku,
+        publicProductId: input.publicProductId,
+        originCountry: input.originCountry,
+        packageLengthMm: input.packageLengthMm,
+        packageWidthMm: input.packageWidthMm,
+        packageHeightMm: input.packageHeightMm,
+        packageWeightGrams: input.packageWeightGrams,
+        warrantyDescription: input.warrantyDescription,
+        specificationsText: input.specificationsText,
+        sourceReference: input.sourceReference,
+        sellerContentAttestedAt: new Date(),
+        categoryId: category.id,
+        priceToman: input.priceToman,
+        stockQuantity: input.stockQuantity,
+        status: "PENDING_REVIEW",
+        reviewNote: null,
+      },
     });
     if (updated.count !== 1) return Response.json({ error: "فقط کالای ردشده یا پیش‌نویسِ همین فروشگاه قابل اصلاح است." }, { status: 409, headers: noStore });
     return Response.json({ status: "PENDING_REVIEW" }, { headers: noStore });
   } catch (error) {
+    if (isSellerSkuConflict(error)) return Response.json({ error: "کد کالای فروشنده قبلاً در همین فروشگاه استفاده شده است." }, { status: 409, headers: noStore });
     console.error("Vendor product resubmission failed.", error);
     return Response.json({ error: "ارسال دوبارهٔ کالا انجام نشد." }, { status: 503, headers: noStore });
   }

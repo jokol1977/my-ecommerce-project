@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPrisma } from "@/lib/prisma";
+import { ZARINPAL_PROVIDER } from "@/lib/zarinpal";
 import { requireActiveAdmin } from "@/lib/require-active-admin";
 import AdminNavigation from "@/app/admin/admin-navigation";
 
@@ -43,7 +44,7 @@ export default async function AdminFinancePage({ searchParams }: AdminFinancePag
     prisma.ledgerTransfer.count(),
     prisma.ledgerTransfer.aggregate({ _sum: { amountToman: true } }),
     prisma.payment.count({
-      where: { provider: "zarinpal", status: "SUCCEEDED", ledgerTransfers: { none: {} } },
+      where: { provider: ZARINPAL_PROVIDER, status: "SUCCEEDED", ledgerTransfers: { none: {} } },
     }),
   ]);
 

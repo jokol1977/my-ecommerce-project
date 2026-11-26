@@ -15,6 +15,7 @@ export default async function SupportCasePage({ params }: SupportCasePageProps) 
   if (!session?.user?.id) redirect("/login");
   if (session.user.status !== "ACTIVE") redirect("/account");
   if (session.user.role !== "CUSTOMER" && session.user.role !== "VENDOR" && session.user.role !== "ADMIN") redirect("/account");
+  if (session.user.role === "ADMIN" && session.user.mfaVerified !== true) redirect("/account");
 
   const { caseId } = await params;
   if (!/^[a-zA-Z0-9_-]{1,40}$/.test(caseId)) notFound();

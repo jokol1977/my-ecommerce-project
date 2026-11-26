@@ -6,6 +6,11 @@ import { getZarinpalConfiguration } from "@/lib/zarinpal";
 import { isPaymentAvailable } from "@/lib/payment-config";
 import { getRuntimeReadiness } from "@/lib/runtime-health";
 import { isIranianSmsConfigured } from "@/lib/sms";
+import { getPrisma } from "@/lib/prisma";
+import { getProductImageMinFreeBytes, getProductImageVolumeLimitBytes } from "@/lib/product-image-policy";
+import { getProductImageVolumeStats } from "@/lib/product-image-storage";
+import { isEmailLoginEnabled } from "@/lib/auth-config";
+import { isLiveCheckoutGateEnabled, isVendorApprovalEnabled } from "@/lib/marketplace-config";
 
 export const metadata: Metadata = {
   title: "آمادگی انتشار | مدیریت جانان‌کده",
@@ -33,7 +38,23 @@ function CheckCard({ title, status, detail, tone }: { title: string; status: str
   );
 }
 
+function formatImageBytes(bytes: number) {
+  return `${new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 1 }).format(bytes / (1024 * 1024))} مگابایت`;
+}
+
+function formatVolumeBytes(bytes: bigint) {
+  return `${new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 1 }).format(Number(bytes) / (1024 * 1024 * 1024))} گیگابایت`;
+}
+
 const processGaps = [
+  {
+    title: "ورود امن مدیر و احراز هویت",
+    detail: "جریان کد یک‌بارمصرف ایمیل، TOTP مدیر و کدهای بازیابی در کد محلی پیاده و آزمون واحد شده است؛ فعال‌سازی محیط واقعی هنوز به SMTP و کلیدهای مدیریت‌شده، migration، آزمون یکپارچه و بازبینی مستقل نیاز دارد. ورود و پیوند هویت با بله خاموش است.",
+  },
+  {
+    title: "اتصال بله و پشتیبانی سفارش",
+    detail: "ربات یا اتصال رسمی بله، پیوند امن حساب کاربر، رضایت جداگانه برای پیام‌های تبلیغاتی و کنترل دسترسی به وضعیت سفارش هنوز پیاده‌سازی یا با حساب واقعی تأیید نشده است.",
+  },
   {
     title: "قرارداد و پذیرش فروشنده",
     detail: "متن نهاییِ تأییدشده و ثبت نسخه، زمان و مدرک پذیرش الکترونیکی هنوز در سامانه وجود ندارد.",
@@ -54,18 +75,47 @@ const processGaps = [
     title: "مالیات و شرایط تجاری",
     detail: "نقش حقوقی طرف‌ها، صورتحساب، مالیات، مرجوعی، کارمزد و شرایط نهایی تسویه به بررسی تخصصی نیاز دارند.",
   },
+  {
+    title: "سقف کلی ذخیره‌سازی تصویر و پاک‌سازی",
+    detail: "سقف منطقی و حداقل فضای آزاد volume پیش از رزرو آپلود کنترل می‌شوند. داشبورد یک نمونهٔ لحظه‌ای از ظرفیت volume نشان می‌دهد؛ هشدار خودکار، پاک‌سازی امن فایل‌ها و رزروهای یتیم و تعیین مقادیر واقعی روی میزبان همچنان لازم‌اند.",
+  },
+  {
+    title: "بکاپ مستقل و بازیابی تولید",
+    detail: "تمرین بازیابی با دادهٔ ساختگی موفق بوده است؛ مقصد مستقل خارج از میزبان، زمان‌بندی، نگهداری نسخه‌ها، هشدار شکست و بازیابی با نسخهٔ واقعی تولید هنوز اثبات نشده‌اند.",
+  },
+  {
+    title: "پایش و ارزیابی امنیتی عملیاتی",
+    detail: "وضعیت فعلی VPS، هشدار ظرفیت و خطا، رویهٔ رخداد و آزمون امنیتی مستقل باید روی محیط واقعی بازبینی و مستند شوند؛ گزارش‌های موجود تاریخی و ایستا هستند.",
+  },
 ];
 
 export default async function AdminReadinessPage() {
   await requireActiveAdmin();
-  const runtimeReadiness = await getRuntimeReadiness();
+  const [runtimeReadiness, imageVolumeStats] = await Promise.all([
+    getRuntimeReadiness(),
+    getProductImageVolumeStats().catch(() => null),
+  ]);
+  const imageVolumeLimitBytes = getProductImageVolumeLimitBytes();
+  const imageVolumeMinFreeBytes = getProductImageMinFreeBytes();
+  let imageVolumeUsageBytes: number | null = null;
+  if (runtimeReadiness.database) {
+    try {
+      const usage = await getPrisma().productImage.aggregate({ _sum: { sizeBytes: true } });
+      imageVolumeUsageBytes = usage._sum.sizeBytes ?? 0;
+    } catch {
+      imageVolumeUsageBytes = null;
+    }
+  }
 
   const production = process.env.NODE_ENV === "production";
   const smsReady = isIranianSmsConfigured();
-  const authReady = false;
+  const authConfigured = isEmailLoginEnabled();
+  const authReady = authConfigured && runtimeReadiness.database && (!production || runtimeReadiness.rateLimitStore);
   const cronReady = hasUsableCronSecret();
   const checkoutFlagOpen = process.env.MARKETPLACE_LIVE_CHECKOUT_ENABLED === "true";
+  const checkoutRuntimeOpen = isLiveCheckoutGateEnabled();
   const sellerFlagOpen = process.env.VENDOR_APPROVAL_ENABLED === "true";
+  const sellerRuntimeOpen = isVendorApprovalEnabled();
   const zarinpal = getZarinpalConfiguration();
   const checkoutAvailable = isPaymentAvailable();
   const zarinpalStatus = !zarinpal
@@ -86,11 +136,57 @@ export default async function AdminReadinessPage() {
       ? "good"
       : "warning";
   const checkoutStatus = production
-    ? checkoutAvailable ? "فعال در تولید" : "قفل بسته"
+    ? checkoutRuntimeOpen
+      ? checkoutAvailable ? "فعال در تولید" : "دروازهٔ پرداخت آماده نیست"
+      : checkoutFlagOpen ? "فلگ باز است، اما پرداخت runtime بسته است" : "قفل بسته"
     : checkoutAvailable ? "قابل استفاده در توسعه" : "غیرفعال در توسعه";
+  const checkoutTone: Tone = production && (checkoutFlagOpen || checkoutRuntimeOpen)
+    ? "blocked"
+    : production ? "good" : "neutral";
   const sellerStatus = production
-    ? sellerFlagOpen ? "قفل باز در تولید" : "قفل بسته"
-    : "در توسعه باز";
+    ? sellerRuntimeOpen
+      ? "فعال در تولید"
+      : sellerFlagOpen ? "فلگ باز است، اما تأیید runtime بسته است" : "قفل بسته"
+    : sellerRuntimeOpen ? "در توسعه باز" : "قفل بسته";
+  const sellerTone: Tone = production && (sellerFlagOpen || sellerRuntimeOpen)
+    ? "blocked"
+    : production ? "good" : "neutral";
+  const imageVolumeStatus = imageVolumeLimitBytes === null
+    ? production ? "سقف تنظیم نشده یا نامعتبر" : "در توسعه تنظیم نشده"
+    : imageVolumeUsageBytes === null
+      ? "مصرف ثبت‌شده در دسترس نیست"
+      : imageVolumeUsageBytes >= imageVolumeLimitBytes
+        ? "سقف پر شده"
+        : "سقف تنظیم شده";
+  const imageVolumeTone: Tone = imageVolumeLimitBytes === null
+    ? production ? "blocked" : "neutral"
+    : imageVolumeUsageBytes === null
+      ? production ? "blocked" : "warning"
+      : imageVolumeUsageBytes >= imageVolumeLimitBytes ? "blocked" : "good";
+  const imageVolumeDetail = imageVolumeLimitBytes === null
+    ? production
+      ? "PRODUCT_IMAGE_VOLUME_LIMIT_BYTES را پس از سنجش ظرفیت volume و فضای لازم برای بکاپ تنظیم کنید؛ تا آن زمان آپلود تولید بسته است."
+      : "سقف کلی در توسعه اختیاری است."
+    : imageVolumeUsageBytes === null
+      ? `مصرف از سقف ${formatImageBytes(imageVolumeLimitBytes)} قابل دریافت نیست؛ این عدد فضای آزاد واقعی دیسک را نشان نمی‌دهد.`
+      : `مصرف رزروشده ${formatImageBytes(imageVolumeUsageBytes)} از سقف ${formatImageBytes(imageVolumeLimitBytes)} است. این عدد از رکوردهای تصویر محاسبه می‌شود و فضای آزاد واقعی یا فایل‌های یتیم را نمی‌سنجد.`;
+  const imagePhysicalVolumeStatus = imageVolumeStats === null
+    ? "ظرفیت volume در دسترس نیست"
+    : imageVolumeMinFreeBytes === null
+      ? "حداقل فضای آزاد تنظیم نشده"
+      : imageVolumeStats.availableBytes <= BigInt(imageVolumeMinFreeBytes)
+        ? "فضای آزاد به حد ذخیره رسیده"
+        : "ظرفیت volume قابل خواندن است";
+  const imagePhysicalVolumeTone: Tone = imageVolumeStats === null
+    ? production ? "blocked" : "warning"
+    : imageVolumeMinFreeBytes === null
+      ? production ? "blocked" : "warning"
+      : imageVolumeStats.availableBytes <= BigInt(imageVolumeMinFreeBytes) ? "blocked" : "good";
+  const imagePhysicalVolumeDetail = imageVolumeStats === null
+    ? "مسیر volume تصاویر در این محیط موجود یا قابل خواندن نیست؛ ظرفیت فیزیکی بررسی نشد."
+    : `فضای قابل استفاده ${formatVolumeBytes(imageVolumeStats.availableBytes)} از ${formatVolumeBytes(imageVolumeStats.totalBytes)} است.${imageVolumeMinFreeBytes === null
+      ? " حداقل فضای آزاد را پس از اندازه‌گیری میزبان تعیین کنید؛ آپلود تولیدی تا آن زمان بسته است."
+      : ` حداقل فضای آزاد رزروشده ${formatImageBytes(imageVolumeMinFreeBytes)} است.`} این فقط نمونهٔ لحظه‌ای است و جای هشدار خودکار میزبان را نمی‌گیرد.`;
 
   return (
     <main dir="rtl" className="min-h-screen bg-slate-50 px-4 py-10">
@@ -115,7 +211,9 @@ export default async function AdminReadinessPage() {
           <CheckCard
             title="ورود و احراز هویت پایه"
             status={authReady ? "تنظیم شده" : "غیرفعال موقت"}
-            detail="این انتشار فقط کاتالوگ عمومی را ارائه می‌کند؛ ورود کاربران و پنل‌های وابسته غیرفعال هستند."
+            detail={authReady
+              ? "پیکربندی ورود موجود است و پایگاه داده در دسترس است؛ بررسی مستقل و ارسال/دریافت آزمایشی ایمیل نیز پیش از استفادهٔ واقعی لازم است."
+              : "ورود تا آماده‌شدن متغیرهای SMTP و کلید MFA، فعال‌کردن صریح AUTH_LOGIN_ENABLED و برقرارشدن نیازمندی‌های این محیط غیرفعال می‌ماند."}
             tone={authReady ? "good" : production ? "blocked" : "warning"}
           />
           <CheckCard
@@ -145,14 +243,26 @@ export default async function AdminReadinessPage() {
           <CheckCard
             title="پرداخت و تسویهٔ سفارش"
             status={checkoutStatus}
-            detail={`قفل تولید: ${checkoutFlagOpen ? "باز" : "بسته"}. حتی با قفل باز، چک‌لیست حقوقی، بازپرداخت و تسویه باید جداگانه تکمیل شود.`}
-            tone={production && checkoutAvailable ? "blocked" : production ? "good" : "neutral"}
+            detail={`فلگ تنظیمی: ${checkoutFlagOpen ? "باز" : "بسته"}؛ وضعیت runtime: ${checkoutRuntimeOpen ? "باز" : "بسته"}. تا تأیید کتبی بازارگاه، بازپرداخت، تسویه و پایلوت کامل نشود، این قفل بسته بماند.`}
+            tone={checkoutTone}
           />
           <CheckCard
             title="ثبت‌نام و تأیید فروشنده"
             status={sellerStatus}
-            detail={`قفل تولید: ${sellerFlagOpen ? "باز" : "بسته"}. تا آماده‌شدن قرارداد و روند امن احراز هویت، این قفل بسته بماند.`}
-            tone={production && sellerFlagOpen ? "blocked" : production ? "good" : "neutral"}
+            detail={`فلگ تنظیمی: ${sellerFlagOpen ? "باز" : "بسته"}؛ وضعیت runtime: ${sellerRuntimeOpen ? "باز" : "بسته"}. تا آماده‌شدن قرارداد و روند امن احراز هویت، این قفل بسته بماند.`}
+            tone={sellerTone}
+          />
+          <CheckCard
+            title="سقف رزرو تصاویر کالا"
+            status={imageVolumeStatus}
+            detail={imageVolumeDetail}
+            tone={imageVolumeTone}
+          />
+          <CheckCard
+            title="فضای فیزیکی volume تصاویر"
+            status={imagePhysicalVolumeStatus}
+            detail={imagePhysicalVolumeDetail}
+            tone={imagePhysicalVolumeTone}
           />
           <CheckCard
             title="وظیفهٔ زمان‌بندی‌شدهٔ پاک‌سازی سفارش‌ها"

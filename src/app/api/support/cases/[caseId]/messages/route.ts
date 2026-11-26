@@ -16,7 +16,11 @@ function errorResponse(message: string, status: number, headers: Record<string, 
 export async function POST(request: Request, { params }: { params: Promise<{ caseId: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return errorResponse("ابتدا وارد حساب شوید.", 401);
-  if (session.user.status !== "ACTIVE" || !["CUSTOMER", "VENDOR", "ADMIN"].includes(session.user.role)) return errorResponse("دسترسی فعال لازم است.", 403);
+  if (
+    session.user.status !== "ACTIVE" ||
+    !["CUSTOMER", "VENDOR", "ADMIN"].includes(session.user.role) ||
+    (session.user.role === "ADMIN" && session.user.mfaVerified !== true)
+  ) return errorResponse("دسترسی فعال لازم است.", 403);
   if (!hasSameOrigin(request)) return errorResponse("مبدأ درخواست معتبر نیست.", 403);
 
   let rateLimit: Awaited<ReturnType<typeof checkAccountRateLimit>>;

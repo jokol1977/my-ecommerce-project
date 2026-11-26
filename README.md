@@ -122,7 +122,7 @@ Compose آمادگی سرویس برنامه را از مسیر بررسی دا�
 4. فایل Compose را بررسی و تصویرها را بسازید:
 
    ```bash
-   docker compose --env-file .env.production config --quiet
+   bash scripts/check-production-compose.sh
    docker compose --profile ops --env-file .env.production build web migrate
    ```
 
@@ -141,13 +141,9 @@ Compose آمادگی سرویس برنامه را از مسیر بررسی دا�
 
 برای استفاده از Cloudflare، در شروع DNS-only ساده‌ترین مسیر است. اگر پراکسی Cloudflare را روشن می‌کنید، پیش از آن Nginx باید فقط رنج‌های IP رسمی Cloudflare را به‌عنوان پراکسی مورداعتماد بشناسد و IP کاربر را از هدر رسمی Cloudflare بازسازی کند؛ در غیر این صورت محدودسازی برنامه IP سرور Cloudflare را خواهد دید. هرگز هدر IP را از همهٔ فرستنده‌ها قابل‌اعتماد فرض نکنید. محافظت در برابر حملهٔ حجمی نیز به ظرفیت شبکه و فایروال ارائه‌دهندهٔ سرور نیاز دارد.
 
-The `order-expiry-scheduler` Compose service checks for expired unpaid orders every minute, so no host cron entry is needed. The `scripts/expire-orders.sh` helper remains available for one-off manual runs. Add only the following database backup schedule to the service user's `crontab -e`, using the real project path:
+The `order-expiry-scheduler` Compose service checks for expired unpaid orders every minute, so no host cron entry is needed. The `scripts/expire-orders.sh` helper remains available for one-off manual runs. Production backups must use the paired database and product-image procedure in [`docs/product-images-backup-restore-fa.md`](docs/product-images-backup-restore-fa.md). Do not schedule `scripts/backup-production-db.sh` by itself: it refuses to run while the web or order-expiry service is active, and a database-only archive is not a consistent backup of the database and image volume. The pair script is currently manual; no recurring backup schedule is configured.
 
-```cron
-30 2 * * * /opt/janankadeh/scripts/backup-production-db.sh
-```
-
-اسکریپت انقضای سفارش کلید زمان‌بندی را از محیط کانتینر می‌خواند؛ آن را در خط cron یا لاگ قرار ندهید. پیش از مهاجرت نسخهٔ جدید هم پشتیبان بگیرید. اسکریپت پشتیبان‌گیری آرشیو را در `backups/production` می‌سازد و فقط ساختار آرشیو را بررسی می‌کند؛ فایل خروجی را رمزگذاری و به محل دیگری منتقل کنید.
+اسکریپت انقضای سفارش کلید زمان‌بندی را از محیط کانتینر می‌خواند؛ آن را در خط cron یا لاگ قرار ندهید. پیش از مهاجرت نسخهٔ جدید هم جفت بکاپ رمزگذاری‌شدهٔ پایگاه‌داده و تصاویر را طبق راهنمای بالا بسازید. مقصد مستقل، کلید عمومی age و بازبینی/بازیابی ایزوله باید پیش از اتکا به بکاپ آماده باشند؛ تا آن زمان زمان‌بندی خودکار ادعا یا تنظیم نشده است.
 
 ### سرویس‌های داخلی و داده‌های ایران
 
@@ -189,7 +185,7 @@ The active administrator can review the paginated activity log at `/admin/audit`
 
 ## Vendor product review
 
-After a vendor application is approved, the seller can submit products from `/seller`. New products remain in `PENDING_REVIEW` and are not visible in the public catalog until an administrator approves them at `/admin/products`. The product endpoint derives the vendor from the authenticated server session; it does not accept a vendor ID from the browser. Catalog writes are limited per seller account to 20 new products and 120 product or stock updates per hour, with counters shared through PostgreSQL. Initial active categories are inserted by the `20261001030000_seed_product_categories` migration. Product image upload is not enabled yet; add images only with a controlled storage pipeline that validates file type and size.
+After a vendor application is approved, the seller can submit products from `/seller`. New products remain in `PENDING_REVIEW` and are not visible in the public catalog until an administrator approves them at `/admin/products`. The product endpoint derives the vendor from the authenticated server session; it does not accept a vendor ID from the browser. Catalog writes are limited per seller account to 20 new products and 120 product or stock updates per hour, with counters shared through PostgreSQL. Initial active categories are inserted by the `20261001030000_seed_product_categories` migration. Seller product forms capture brand/manufacturer, model/type, seller SKU, origin, package dimensions and weight, warranty, specifications, and a public source reference; images use the controlled upload pipeline described in `docs/catalog-intake.md`.
 
 Vendors can update stock only for their own approved, active products. Price and product details are not editable from this endpoint; changes to public-facing product content should go through moderation.
 
@@ -225,7 +221,7 @@ If a payment verifies after its stock reservation has expired and the applicatio
 
 ## Seller onboarding release gate
 
-In production, `VENDOR_APPROVAL_ENABLED=false` blocks both new seller applications and administrator approvals. The application form explains the pause and does not collect store details. Local development keeps the application workflow available. The flag must remain false until a reviewed seller agreement and a secure identity review process exist; the current application does not record electronic contract acceptance or identity verification.
+In production, `VENDOR_APPROVAL_ENABLED=false` blocks both new seller applications and administrator approvals. The application form explains the pause and does not collect store details. When the flow is enabled outside production, an applicant must accept the configured, versioned seller-agreement PDF; the server checks its SHA-256 and stores an immutable acceptance record that administrators must verify before approval. Production remains hard-closed until the final agreement is approved and published and a secure identity-review process is available. The application does not perform identity verification.
 
 Administrators can review environment gate states and known operational gaps at `/admin/readiness`. The page shows only readiness booleans and status labels; it never displays passwords, merchant UUIDs, API keys, or other secret values, and it is not a production release approval.
 

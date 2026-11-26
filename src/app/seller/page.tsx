@@ -8,6 +8,7 @@ import type { ProductStatus as ProductStatusType } from "@/generated/prisma/enum
 import ProductForm from "./product-form";
 import StockEditor from "./stock-editor";
 import ResubmitProduct from "./resubmit-product";
+import ProductImagesManager from "./product-images-manager";
 
 export const metadata: Metadata = { title: "پنل فروشنده | جانان‌کده" };
 
@@ -70,7 +71,7 @@ export default async function SellerDashboardPage({ searchParams }: SellerDashbo
       orderBy: { updatedAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE + 1,
-      select: { id: true, name: true, description: true, categoryId: true, priceToman: true, stockQuantity: true, reviewNote: true, status: true, updatedAt: true, category: { select: { name: true } } },
+      select: { id: true, name: true, description: true, brandName: true, productType: true, modelCode: true, sellerSku: true, publicProductId: true, originCountry: true, packageLengthMm: true, packageWidthMm: true, packageHeightMm: true, packageWeightGrams: true, warrantyDescription: true, specificationsText: true, categoryId: true, priceToman: true, stockQuantity: true, sourceReference: true, reviewNote: true, status: true, updatedAt: true, category: { select: { name: true } }, images: { select: { id: true, url: true, altText: true, sizeBytes: true, storageReady: true, storageDeleting: true }, orderBy: { position: "asc" } } },
     }),
   ]);
   const hasNextPage = products.length > PAGE_SIZE;
@@ -113,9 +114,10 @@ export default async function SellerDashboardPage({ searchParams }: SellerDashbo
             <div className="mt-4 space-y-3">
               {visibleProducts.map((product) => (
                 <article key={product.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-                  <div><h3 className="font-bold text-slate-900">{product.name}</h3><p className="mt-1 text-sm text-slate-500">{product.category.name} · {product.priceToman.toLocaleString("fa-IR")} تومان · موجودی {product.stockQuantity.toLocaleString("fa-IR")}</p>
+                  <div><h3 className="font-bold text-slate-900">{product.name}</h3><p className="mt-1 text-sm text-slate-500">{product.category.name} · {product.priceToman.toLocaleString("fa-IR")} تومان · موجودی {product.stockQuantity.toLocaleString("fa-IR")}</p>{(product.brandName || product.modelCode || product.sellerSku) && <p className="mt-1 text-xs text-slate-500">{[product.brandName, product.modelCode, product.sellerSku ? `کد فروشنده: ${product.sellerSku}` : null].filter(Boolean).join(" · ")}</p>}
                     {product.status === "REJECTED" && <p className="mt-2 max-w-2xl rounded-lg bg-rose-50 p-3 text-sm leading-6 text-rose-900">دلیل رد: {product.reviewNote ?? "مدیر برای این کالا توضیحی ثبت نکرده است."}</p>}
-                    {(product.status === "REJECTED" || product.status === "DRAFT") && <ResubmitProduct product={{ id: product.id, name: product.name, description: product.description, categoryId: product.categoryId, priceToman: product.priceToman, stockQuantity: product.stockQuantity }} categories={categoryOptions} />}
+                    {(product.status === "REJECTED" || product.status === "DRAFT") && <ResubmitProduct product={{ id: product.id, name: product.name, description: product.description, categoryId: product.categoryId, priceToman: product.priceToman, stockQuantity: product.stockQuantity, brandName: product.brandName, productType: product.productType, modelCode: product.modelCode, sellerSku: product.sellerSku, publicProductId: product.publicProductId, originCountry: product.originCountry, packageLengthMm: product.packageLengthMm, packageWidthMm: product.packageWidthMm, packageHeightMm: product.packageHeightMm, packageWeightGrams: product.packageWeightGrams, warrantyDescription: product.warrantyDescription, specificationsText: product.specificationsText, sourceReference: product.sourceReference }} categories={categoryOptions} />}
+                    {(product.status === "REJECTED" || product.status === "DRAFT" || product.status === "PENDING_REVIEW") && <ProductImagesManager productId={product.id} images={product.images} />}
                   </div>
                   <div className="flex flex-wrap items-center gap-4"><span className={`rounded-full px-3 py-1.5 text-sm font-bold ${product.status === "ACTIVE" ? "bg-emerald-50 text-emerald-800" : product.status === "REJECTED" ? "bg-rose-50 text-rose-800" : "bg-amber-50 text-amber-900"}`}>{statusLabels[product.status]}</span>
                     {product.status === "ACTIVE" && <StockEditor productId={product.id} initialStock={product.stockQuantity} />}

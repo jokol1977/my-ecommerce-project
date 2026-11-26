@@ -3,14 +3,15 @@ import { checkAccountRateLimit } from "@/lib/rate-limit";
 
 const noStore = { "Cache-Control": "no-store" };
 
-type WriteKind = "create" | "update";
+type WriteKind = "create" | "update" | "image";
 
 const policies = {
   create: { scope: "vendor-product-create", limit: 20 },
   update: { scope: "vendor-product-update", limit: 120 },
+  image: { scope: "vendor-product-image", limit: 30 },
 } satisfies Record<WriteKind, { scope: string; limit: number }>;
 
-/** Share seller catalog write limits across all app instances through PostgreSQL. */
+/** Share seller catalog write limits across all app instances through Redis in production. */
 export async function limitVendorCatalogWrites(userId: string, kind: WriteKind): Promise<Response | null> {
   try {
     const policy = policies[kind];
@@ -18,7 +19,9 @@ export async function limitVendorCatalogWrites(userId: string, kind: WriteKind):
     if (!rateLimit.allowed) {
       const error = kind === "create"
         ? "سقف ثبت کالای جدید در این ساعت به پایان رسیده است. بعداً دوباره تلاش کنید."
-        : "سقف تغییر اطلاعات و موجودی کالا در این ساعت به پایان رسیده است. بعداً دوباره تلاش کنید.";
+        : kind === "image"
+          ? "سقف بارگذاری و حذف تصویر در این ساعت به پایان رسیده است. بعداً دوباره تلاش کنید."
+          : "سقف تغییر اطلاعات و موجودی کالا در این ساعت به پایان رسیده است. بعداً دوباره تلاش کنید.";
       return Response.json({ error }, {
         status: 429,
         headers: { ...noStore, "Retry-After": String(rateLimit.retryAfterSeconds) },

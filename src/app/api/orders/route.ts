@@ -1,11 +1,12 @@
 import { createHmac } from "node:crypto";
 import { auth } from "@/auth";
 import { getPrisma } from "@/lib/prisma";
-import { releaseExpiredOrderReservations } from "@/lib/order-reservations";
+import { ORDER_PAYMENT_WINDOW_MS, releaseExpiredOrderReservations } from "@/lib/order-reservations";
 import { checkAccountRateLimit } from "@/lib/rate-limit";
 import { MAX_ORDER_TOTAL_TOMAN } from "@/lib/money";
 import { isProductionCheckoutConfigured } from "@/lib/payment-config";
-import { isValidIranianPostalCode, normalizeIranianMobile } from "@/lib/iranian-input";
+import { findIranCity, findIranProvince } from "@/lib/iran-locations";
+import { isValidIranianPostalCode, normalizeIranianDigits, normalizeIranianMobile } from "@/lib/iranian-input";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,8 @@ type DeliveryAddress = {
   province: string;
   city: string;
   addressLine: string;
+  buildingNumber: string | null;
+  unit: string | null;
   postalCode: string;
 };
 
@@ -113,19 +116,32 @@ function requiredText(value: unknown, label: string, min: number, max: number) {
   return cleaned;
 }
 
+function optionalAddressDetail(value: unknown, label: string) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") throw new CheckoutError(400, `${label} معتبر نیست.`);
+  const cleaned = value.normalize("NFKC").trim();
+  if (cleaned.length > 40 || /[\u0000-\u001f\u007f]/.test(cleaned)) throw new CheckoutError(400, `${label} معتبر نیست.`);
+  return cleaned || null;
+}
+
 function parseAddress(value: unknown): DeliveryAddress {
   if (!record(value)) throw new CheckoutError(400, "نشانی تحویل کامل نیست.");
   const recipient = requiredText(value.recipient, "نام تحویل‌گیرنده", 2, 120);
   const phone = normalizeIranianMobile(requiredText(value.phone, "شمارهٔ تماس", 8, 24));
-  const province = requiredText(value.province, "استان", 2, 100);
-  const city = requiredText(value.city, "شهر", 2, 100);
+  const province = findIranProvince(requiredText(value.province, "استان", 2, 100));
+  const rawCity = requiredText(value.city, "شهر", 2, 100);
+  const city = province ? findIranCity(province, rawCity) : null;
   const addressLine = requiredText(value.addressLine, "نشانی", 8, 1000);
+  const buildingNumber = optionalAddressDetail(value.buildingNumber, "شمارهٔ پلاک");
+  const unit = optionalAddressDetail(value.unit, "طبقه / واحد");
   const postalCode = requiredText(value.postalCode, "کد پستی", 10, 10);
 
   if (!phone) throw new CheckoutError(400, "شمارهٔ موبایل معتبر نیست.");
-  if (!isValidIranianPostalCode(postalCode)) throw new CheckoutError(400, "کد پستی باید ۱۰ رقم باشد.");
+  if (!province || !city) throw new CheckoutError(400, "استان و شهر انتخاب‌شده معتبر نیستند.");
+  const normalizedPostalCode = normalizeIranianDigits(postalCode);
+  if (!isValidIranianPostalCode(normalizedPostalCode)) throw new CheckoutError(400, "کد پستی باید ۱۰ رقم باشد.");
 
-  return { recipient, phone, province, city, addressLine, postalCode };
+  return { recipient, phone, province, city, addressLine, buildingNumber, unit, postalCode: normalizedPostalCode };
 }
 
 function jsonError(message: string, status: number, code?: string) {
@@ -195,7 +211,7 @@ export async function POST(request: Request) {
 
   const session = await auth();
   if (!session?.user?.id) return jsonError("برای ثبت سفارش ابتدا وارد حساب شوید.", 401);
-  if (session.user.status !== "ACTIVE") return jsonError("این حساب امکان ثبت سفارش ندارد.", 403);
+  if (session.user.status !== "ACTIVE" || session.user.role !== "CUSTOMER") return jsonError("دسترسی مشتری فعال لازم است.", 403);
   if (!process.env.AUTH_SECRET) return jsonError("تنظیم امنیتی ثبت سفارش کامل نیست.", 503);
 
   const rateLimit = await checkAccountRateLimit("checkout", session.user.id, 20, 60 * 60);
@@ -243,6 +259,8 @@ export async function POST(request: Request) {
           province: savedAddress.province,
           city: savedAddress.city,
           addressLine: savedAddress.addressLine,
+          buildingNumber: savedAddress.buildingNumber,
+          unit: savedAddress.unit,
           postalCode: savedAddress.postalCode,
         };
       }
@@ -303,7 +321,7 @@ export async function POST(request: Request) {
           shippingFeeToman: 0,
           totalToman,
           status: "PENDING_PAYMENT",
-          paymentExpiresAt: new Date(Date.now() + 20 * 60 * 1000),
+          paymentExpiresAt: new Date(Date.now() + ORDER_PAYMENT_WINDOW_MS),
           vendorOrders: {
             create: [...groups.entries()].map(([vendorId, lines]) => ({
               vendorId,

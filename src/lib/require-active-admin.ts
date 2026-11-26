@@ -6,5 +6,9 @@ import { redirect } from "next/navigation";
 export async function requireActiveAdmin(): Promise<void> {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  if (session.user.status !== "ACTIVE" || session.user.role !== "ADMIN") redirect("/account");
+  if (
+    session.user.status !== "ACTIVE" ||
+    session.user.role !== "ADMIN" ||
+    session.user.mfaVerified !== true
+  ) redirect("/account");
 }

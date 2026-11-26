@@ -52,6 +52,8 @@ export default async function OrderPage({ params, searchParams }: OrderPageProps
       province: true,
       city: true,
       addressLine: true,
+      buildingNumber: true,
+      unit: true,
       postalCode: true,
       vendorOrders: {
         select: {
@@ -107,6 +109,7 @@ export default async function OrderPage({ params, searchParams }: OrderPageProps
           <h2 id="delivery-address-heading" className="font-black text-slate-900">نشانی تحویل ثبت‌شده برای این سفارش</h2>
           <p className="mt-3 text-sm leading-7 text-slate-700">{order.recipient} · <span dir="ltr" className="inline-block">{order.phone}</span></p>
           <p className="text-sm leading-7 text-slate-700">{order.province}، {order.city}، {order.addressLine}</p>
+          {(order.buildingNumber || order.unit) && <p className="text-sm leading-7 text-slate-700">{order.buildingNumber && <>پلاک {order.buildingNumber}</>}{order.buildingNumber && order.unit && " · "}{order.unit && <>طبقه / واحد {order.unit}</>}</p>}
           <p className="text-sm text-slate-600">کد پستی: <span dir="ltr" className="inline-block font-mono">{order.postalCode}</span></p>
         </section>
 
@@ -162,7 +165,7 @@ export default async function OrderPage({ params, searchParams }: OrderPageProps
             confirmedPaymentCount={paymentSummary._count._all}
           />
         )}
-        {order.status === "PAYMENT_REVIEW" && <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold leading-7 text-rose-900">پرداخت در زرین‌پال تأیید شده، اما سفارش به‌دلیل وضعیت موجودی یا تلاش پرداخت هم‌زمان متوقف شده است. مدیر باید سفارش یا بازپرداخت را بررسی کند؛ این سفارش به فروشنده ارسال نمی‌شود.</p>}
+        {order.status === "PAYMENT_REVIEW" && <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold leading-7 text-rose-900">پرداخت در زرین‌پال تأیید شده، اما سفارش به‌دلیل مغایرت مبلغ، وضعیت موجودی یا تلاش پرداخت هم‌زمان متوقف شده است. مدیر باید سفارش یا بازپرداخت را بررسی کند؛ این سفارش به فروشنده ارسال نمی‌شود.</p>}
         {order.status === "PENDING_PAYMENT" && paymentAvailable && <StartPayment orderId={order.id} hasPendingPayment={hasPendingPayment} />}
         {order.status === "PENDING_PAYMENT" && !paymentAvailable && <p className="mt-5 rounded-xl bg-amber-50 p-4 text-sm leading-7 text-amber-900">{!liveCheckoutGateEnabled ? "پرداخت واقعی تا تکمیل فرآیندهای فروش، بازگشت وجه و تسویه فعال نمی‌شود." : "زرین‌پال در این محیط هنوز پیکربندی نشده است. در حالت توسعه سفارش محلی ثبت می‌شود، اما پرداخت انجام نمی‌گیرد."}{order.paymentExpiresAt && <> موجودی تا {new Intl.DateTimeFormat("fa-IR-u-ca-persian", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Tehran" }).format(order.paymentExpiresAt)} رزرو است.</>}</p>}
         {order.status === "PENDING_PAYMENT" && <CancelOrder orderId={order.id} />}

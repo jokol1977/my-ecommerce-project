@@ -115,6 +115,8 @@ model User {
   supportCases SupportCase[] @relation("SupportCaseCustomer")
   supportCaseMessages SupportCaseMessage[] @relation("SupportCaseMessageAuthor")
   adminAuditEvents AdminAuditEvent[] @relation("AdminAuditActor")
+  adminTotpFactor AdminTotpFactor?
+  vendorAgreementAcceptances VendorAgreementAcceptance[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -158,6 +160,43 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+model EmailLoginChallenge {
+  email      String   @id @db.VarChar(320)
+  codeHash   String   @db.Char(64)
+  expiresAt  DateTime
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+model AdminTotpFactor {
+  userId              String              @id
+  encryptedSecret     String              @db.VarChar(512)
+  enabledAt           DateTime?
+  enrollmentExpiresAt DateTime?
+  lastUsedCounter     BigInt?
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recoveryCodes       AdminRecoveryCode[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([enabledAt])
+  @@index([enrollmentExpiresAt])
+}
+
+model AdminRecoveryCode {
+  id        String         @id @default(cuid())
+  userId    String
+  codeHash  String         @unique @db.Char(64)
+  usedAt    DateTime?
+  factor    AdminTotpFactor @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+
+  @@index([userId, usedAt])
+}
+
 model VendorProfile {
   id          String       @id @default(cuid())
   userId      String       @unique
@@ -168,10 +207,26 @@ model VendorProfile {
   user        User         @relation(fields: [userId], references: [id], onDelete: Restrict)
   products    Product[]
   orders      VendorOrder[]
+  agreementAcceptances VendorAgreementAcceptance[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
   @@index([status, createdAt])
+}
+
+model VendorAgreementAcceptance {
+  id               String        @id @default(cuid())
+  userId           String
+  vendorProfileId  String
+  contractVersion  String        @db.VarChar(80)
+  documentSha256   String        @db.Char(64)
+  acceptedAt       DateTime      @default(now())
+  user             User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  vendorProfile    VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Restrict)
+
+  @@index([userId, acceptedAt])
+  @@index([vendorProfileId, acceptedAt])
+  @@index([vendorProfileId, contractVersion, documentSha256], map: "VendorAgreementAcceptance_current_idx")
 }
 
 model Category {
@@ -196,6 +251,20 @@ model Product {
   slug          String
   name          String
   description   String        @default("") @db.Text
+  brandName     String?       @db.VarChar(120)
+  productType   String?       @db.VarChar(120)
+  modelCode     String?       @db.VarChar(120)
+  sellerSku     String?       @db.VarChar(80)
+  publicProductId String?     @db.VarChar(80)
+  originCountry String?       @db.VarChar(100)
+  packageLengthMm Int?
+  packageWidthMm  Int?
+  packageHeightMm Int?
+  packageWeightGrams Int?
+  warrantyDescription String? @db.VarChar(500)
+  specificationsText String?  @db.Text
+  sourceReference String?     @db.VarChar(2048)
+  sellerContentAttestedAt DateTime?
   priceToman    Int
   stockQuantity Int           @default(0)
   status        ProductStatus @default(DRAFT)
@@ -209,6 +278,7 @@ model Product {
   updatedAt     DateTime      @updatedAt
 
   @@unique([vendorId, slug])
+  @@unique([vendorId, sellerSku])
   @@index([status, categoryId, createdAt])
   @@index([status, createdAt, id])
   @@index([status, priceToman, id])
@@ -221,6 +291,9 @@ model ProductImage {
   url       String
   altText   String   @default("")
   position  Int      @default(0)
+  sizeBytes Int      @default(0)
+  storageReady Boolean @default(false)
+  storageDeleting Boolean @default(false)
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
@@ -267,6 +340,8 @@ model Address {
   province     String
   city         String
   addressLine  String   @db.Text
+  buildingNumber String?
+  unit         String?
   postalCode   String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt    DateTime @default(now())
@@ -287,6 +362,8 @@ model Order {
   province              String
   city                  String
   addressLine           String       @db.Text
+  buildingNumber       String?
+  unit                  String?
   postalCode            String
   subtotalToman         Int
   shippingFeeToman      Int          @default(0)

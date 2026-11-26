@@ -1,0 +1,3 @@
+ALTER TABLE "ProductImage"
+  ADD COLUMN "sizeBytes" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN "storageReady" BOOLEAN NOT NULL DEFAULT false;

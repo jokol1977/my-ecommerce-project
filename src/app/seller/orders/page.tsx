@@ -9,7 +9,19 @@ import type { OrderStatus as OrderStatusType } from "@/generated/prisma/enums";
 export const metadata: Metadata = { title: "سفارش‌های فروشگاه | جانان‌کده" };
 const statusLabels = { PAID: "پرداخت‌شده؛ آمادهٔ پردازش", PROCESSING: "در حال آماده‌سازی", SHIPPED: "ارسال‌شده", DELIVERED: "تحویل‌شده" } as const;
 const FULFILLMENT_STATUSES = ["PAID", "PROCESSING", "SHIPPED", "DELIVERED"] as const satisfies readonly OrderStatusType[];
+const VISIBLE_PARENT_ORDER_STATUSES = [...FULFILLMENT_STATUSES, "PAYMENT_REVIEW"] as const satisfies readonly OrderStatusType[];
 const PAGE_SIZE = 25;
+
+function needsFinancialReview(order: {
+  status: OrderStatusType;
+  totalToman: number;
+  payments: Array<{ status: string; amountToman: number; providerTransactionId: string | null }>;
+}) {
+  const paymentAttempts = order.payments.filter((payment) => payment.status === "PENDING" || payment.status === "SUCCEEDED");
+  const capture = paymentAttempts[0];
+  return order.status === "PAYMENT_REVIEW" || paymentAttempts.length !== 1 || capture?.status !== "SUCCEEDED" ||
+    !capture.providerTransactionId || capture.amountToman !== order.totalToman;
+}
 
 type SellerOrdersPageProps = {
   searchParams: Promise<{ page?: string | string[]; orderId?: string | string[]; status?: string | string[] }>;
@@ -49,14 +61,20 @@ export default async function SellerOrdersPage({ searchParams }: SellerOrdersPag
     where: {
       vendorId: vendor.id,
       status: selectedStatus ?? { in: [...FULFILLMENT_STATUSES] },
-      order: { status: { in: [...FULFILLMENT_STATUSES] }, ...(orderId ? { id: orderId } : {}) },
+      order: { status: { in: [...VISIBLE_PARENT_ORDER_STATUSES] }, ...(orderId ? { id: orderId } : {}) },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * PAGE_SIZE,
     take: PAGE_SIZE + 1,
     select: {
       id: true, status: true, subtotalToman: true, shippingProvider: true, trackingCode: true, shippedAt: true, deliveryConfirmedAt: true,
-      order: { select: { id: true, createdAt: true, recipient: true, phone: true, province: true, city: true, addressLine: true, postalCode: true } },
+      order: {
+        select: {
+          id: true, createdAt: true, recipient: true, phone: true, province: true, city: true, addressLine: true, buildingNumber: true, unit: true, postalCode: true,
+          status: true, totalToman: true,
+          payments: { where: { provider: "ZARINPAL" }, select: { status: true, amountToman: true, providerTransactionId: true } },
+        },
+      },
       items: { select: { productName: true, quantity: true, unitPriceToman: true } },
     },
   });
@@ -89,12 +107,13 @@ export default async function SellerOrdersPage({ searchParams }: SellerOrdersPag
     {visibleOrders.length === 0 ? <p className="mt-7 rounded-2xl bg-white p-8 text-slate-600">{orderId || status ? "سفارشی با این فیلترها پیدا نشد." : "سفارش پرداخت‌شده‌ای برای پردازش ندارید. درگاه پرداخت هنوز فعال نشده است."}</p> : <div className="mt-7 space-y-4">{visibleOrders.map((vendorOrder) => (
       <article key={vendorOrder.id} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-black text-slate-900">{statusLabels[vendorOrder.status as keyof typeof statusLabels] ?? "وضعیت نامشخص"}</h2><p className="mt-1 text-xs text-slate-500">سفارش <span dir="ltr" className="font-mono">{vendorOrder.order.id}</span> · {new Intl.DateTimeFormat("fa-IR-u-ca-persian", { dateStyle: "long", timeZone: "Asia/Tehran" }).format(vendorOrder.order.createdAt)}</p></div><p className="font-black text-blue-800">{vendorOrder.subtotalToman.toLocaleString("fa-IR")} تومان</p></div>
+        {needsFinancialReview(vendorOrder.order) && <p role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-7 text-amber-900">پرداخت این سفارش برای بررسی مالی علامت‌گذاری شده است. تا رفع بررسی، آماده‌سازی یا ارسال را انجام ندهید.</p>}
         {vendorOrder.shippedAt && <p className="mt-3 text-xs text-slate-500">زمان ثبت ارسال: {new Intl.DateTimeFormat("fa-IR-u-ca-persian", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Tehran" }).format(vendorOrder.shippedAt)}</p>}
         {vendorOrder.deliveryConfirmedAt && <p className="mt-1 text-xs text-slate-500">زمان تأیید دریافت: {new Intl.DateTimeFormat("fa-IR-u-ca-persian", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Tehran" }).format(vendorOrder.deliveryConfirmedAt)}</p>}
-        <div className="mt-4 rounded-xl bg-slate-50 p-4"><h3 className="font-bold text-slate-800">نشانی تحویل</h3><p className="mt-2 text-sm leading-7 text-slate-700">{vendorOrder.order.recipient} · <span dir="ltr">{vendorOrder.order.phone}</span><br />{vendorOrder.order.province}، {vendorOrder.order.city}، {vendorOrder.order.addressLine}<br />کد پستی: {vendorOrder.order.postalCode}</p></div>
+        <div className="mt-4 rounded-xl bg-slate-50 p-4"><h3 className="font-bold text-slate-800">نشانی تحویل</h3><p className="mt-2 text-sm leading-7 text-slate-700">{vendorOrder.order.recipient} · <span dir="ltr">{vendorOrder.order.phone}</span><br />{vendorOrder.order.province}، {vendorOrder.order.city}، {vendorOrder.order.addressLine}<br />{vendorOrder.order.buildingNumber && <>پلاک {vendorOrder.order.buildingNumber} · </>}{vendorOrder.order.unit && <>طبقه / واحد {vendorOrder.order.unit} · </>}کد پستی: {vendorOrder.order.postalCode}</p></div>
         <ul className="mt-4 space-y-2">{vendorOrder.items.map((item, index) => <li key={`${item.productName}-${index}`} className="flex justify-between gap-3 text-sm text-slate-700"><span>{item.productName} × {item.quantity.toLocaleString("fa-IR")}</span><span>{(item.unitPriceToman * item.quantity).toLocaleString("fa-IR")} تومان</span></li>)}</ul>
         {vendorOrder.status === "SHIPPED" && vendorOrder.trackingCode && <p className="mt-4 rounded-lg bg-blue-50 p-3 text-sm font-bold text-blue-900">{vendorOrder.shippingProvider}: کد رهگیری <span dir="ltr" className="font-mono">{vendorOrder.trackingCode}</span></p>}
-        {vendorOrder.status !== "SHIPPED" && vendorOrder.status !== "DELIVERED" && <VendorOrderActions vendorOrderId={vendorOrder.id} status={vendorOrder.status} />}
+        {!needsFinancialReview(vendorOrder.order) && vendorOrder.status !== "SHIPPED" && vendorOrder.status !== "DELIVERED" && <VendorOrderActions vendorOrderId={vendorOrder.id} status={vendorOrder.status} />}
       </article>
     ))}</div>}
     {(page > 1 || hasNextPage) && <nav aria-label="صفحه‌بندی سفارش‌های فروشگاه" className="mt-7 flex justify-between">

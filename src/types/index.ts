@@ -84,6 +84,8 @@ export interface Address {
   province: string;
   city: string;
   addressLine: string;
+  buildingNumber: string | null;
+  unit: string | null;
   postalCode: string;
 }
 
@@ -106,6 +108,8 @@ export interface Order {
   province: string;
   city: string;
   addressLine: string;
+  buildingNumber: string | null;
+  unit: string | null;
   postalCode: string;
   subtotalToman: number;
   shippingFeeToman: number;

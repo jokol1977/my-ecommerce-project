@@ -1,4 +1,5 @@
 import "server-only";
+import { isUrlSafeSecret } from "@/lib/config-secrets";
 import { createHmac } from "node:crypto";
 import { isIP } from "node:net";
 import { createClient } from "redis";
@@ -21,10 +22,11 @@ let redisClient: ReturnType<typeof createClient> | undefined;
 let redisConnection: Promise<ReturnType<typeof createClient>> | undefined;
 
 function getRateLimitSecret() {
-  const secret = process.env.RATE_LIMIT_SECRET ?? process.env.AUTH_SECRET;
+  const production = process.env.NODE_ENV === "production";
+  const secret = process.env.RATE_LIMIT_SECRET ?? (production ? undefined : process.env.AUTH_SECRET);
   if (
     !secret || Buffer.byteLength(secret, "utf8") < 32 ||
-    (process.env.NODE_ENV === "production" && secret.startsWith("replace_with_"))
+    (production && (!isUrlSafeSecret(secret) || secret === process.env.AUTH_SECRET))
   ) {
     throw new Error("Rate limiting requires a secret of at least 32 bytes.");
   }
@@ -194,12 +196,17 @@ function emailRateLimitSubject(email: string) {
     .digest("hex");
 }
 
-/** Limit requests made through the first-party login form. */
+/** Limit code requests by normalized email, including direct calls to the API. */
 export async function checkEmailSignInRateLimit(email: string) {
   return checkAccountRateLimit("email-sign-in-form", emailRateLimitSubject(email), 5, 15 * 60);
 }
 
-/** Also limit delivery inside Auth.js so direct auth API calls cannot bypass the form. */
+/** Apply a separate per-email quota to successful login-code delivery attempts. */
 export async function checkEmailSignInDeliveryRateLimit(email: string) {
   return checkAccountRateLimit("email-sign-in-delivery", emailRateLimitSubject(email), 5, 15 * 60);
+}
+
+/** Limit OTP and second-factor verification attempts for one normalized email. */
+export async function checkEmailSignInVerificationRateLimit(email: string) {
+  return checkAccountRateLimit("email-sign-in-verify", emailRateLimitSubject(email), 5, 15 * 60);
 }

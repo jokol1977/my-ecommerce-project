@@ -2,10 +2,19 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 
 const EXPIRATION_BATCH_SIZE = 10;
+export const ORDER_PAYMENT_WINDOW_MS = 20 * 60_000;
+export const ORDER_RESERVATION_MAX_AGE_MS = 30 * 60_000;
 
 export async function releaseExpiredOrderReservations(tx: Prisma.TransactionClient, now = new Date()) {
+  const maxAgeCutoff = new Date(now.getTime() - ORDER_RESERVATION_MAX_AGE_MS);
+  const expirationCriteria = {
+    OR: [
+      { paymentExpiresAt: { lte: now } },
+      { createdAt: { lte: maxAgeCutoff } },
+    ],
+  };
   const expiredOrders = await tx.order.findMany({
-    where: { status: "PENDING_PAYMENT", paymentExpiresAt: { lte: now } },
+    where: { status: "PENDING_PAYMENT", ...expirationCriteria },
     orderBy: [{ paymentExpiresAt: "asc" }, { id: "asc" }],
     take: EXPIRATION_BATCH_SIZE,
     select: { id: true, vendorOrders: { select: { items: { select: { productId: true, quantity: true } } } } },
@@ -14,7 +23,7 @@ export async function releaseExpiredOrderReservations(tx: Prisma.TransactionClie
   let releasedCount = 0;
   for (const order of expiredOrders) {
     const canceled = await tx.order.updateMany({
-      where: { id: order.id, status: "PENDING_PAYMENT", paymentExpiresAt: { lte: now } },
+      where: { id: order.id, status: "PENDING_PAYMENT", ...expirationCriteria },
       data: { status: "CANCELLED", paymentExpiresAt: null },
     });
     if (canceled.count !== 1) continue;

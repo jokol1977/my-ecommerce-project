@@ -4,6 +4,7 @@ import { getPrisma } from "@/lib/prisma";
 import { readRequestBody } from "@/lib/request-body";
 import { checkAccountRateLimit } from "@/lib/rate-limit";
 import { isVendorApprovalEnabled } from "@/lib/marketplace-config";
+import { getCurrentVendorAgreement } from "@/lib/vendor-agreement";
 
 export const runtime = "nodejs";
 const noStore = { "Cache-Control": "no-store" };
@@ -20,6 +21,10 @@ export async function POST(request: Request) {
   }
   if (!isVendorApprovalEnabled()) {
     return responseError("پذیرش و بررسی درخواست‌های فروشندگی تا آماده‌شدن قرارداد و فرایند احراز هویت در تولید غیرفعال است.", 503);
+  }
+  const agreement = await getCurrentVendorAgreement();
+  if (!agreement) {
+    return responseError("نسخهٔ نهایی و قابل‌تطبیق قرارداد فروشنده پیکربندی نشده است.", 503);
   }
 
   if (process.env.NODE_ENV === "production" && !process.env.AUTH_URL) {
@@ -50,6 +55,13 @@ export async function POST(request: Request) {
   const data = body as Record<string, unknown>;
   if (typeof data.storeName !== "string" || typeof data.description !== "string") {
     return responseError("نام فروشگاه و معرفی آن لازم است.", 400);
+  }
+  if (
+    data.agreementAccepted !== true ||
+    data.agreementVersion !== agreement.version ||
+    data.agreementSha256 !== agreement.documentSha256
+  ) {
+    return responseError("پذیرش نسخهٔ جاری قرارداد فروشنده لازم است.", 400);
   }
   const storeName = data.storeName.normalize("NFKC").trim();
   const description = data.description.normalize("NFKC").trim();
@@ -88,9 +100,20 @@ export async function POST(request: Request) {
     });
     if (existing) return responseError(`برای این حساب پیش‌تر درخواست ثبت شده است (${existing.status}).`, 409);
 
-    const vendor = await getPrisma().vendorProfile.create({
-      data: { userId: user.id, storeName, slug, description, status: "PENDING" },
-      select: { id: true, status: true, storeName: true },
+    const vendor = await getPrisma().$transaction(async (tx) => {
+      const createdVendor = await tx.vendorProfile.create({
+        data: { userId: user.id, storeName, slug, description, status: "PENDING" },
+        select: { id: true, status: true, storeName: true },
+      });
+      await tx.vendorAgreementAcceptance.create({
+        data: {
+          userId: user.id,
+          vendorProfileId: createdVendor.id,
+          contractVersion: agreement.version,
+          documentSha256: agreement.documentSha256,
+        },
+      });
+      return createdVendor;
     });
     return Response.json(vendor, { status: 201, headers: noStore });
   } catch (error) {

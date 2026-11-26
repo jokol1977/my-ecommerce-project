@@ -2,7 +2,13 @@
 
 import { useState, type FormEvent } from "react";
 
-export default function VendorApplicationForm() {
+type VendorAgreement = {
+  version: string;
+  documentSha256: string;
+  href: string;
+};
+
+export default function VendorApplicationForm({ agreement }: { agreement: VendorAgreement }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -22,6 +28,9 @@ export default function VendorApplicationForm() {
           storeName: values.get("storeName"),
           slug: values.get("slug"),
           description: values.get("description"),
+          agreementAccepted: values.get("agreementAccepted") === "on",
+          agreementVersion: agreement.version,
+          agreementSha256: agreement.documentSha256,
         }),
         cache: "no-store",
       });
@@ -60,6 +69,12 @@ export default function VendorApplicationForm() {
       <label className="block text-sm font-bold text-slate-700">
         معرفی فروشگاه و کالاهایی که عرضه می‌کنید
         <textarea name="description" required minLength={20} maxLength={1000} rows={5} className="mt-2 w-full rounded-xl border border-slate-300 p-4 font-normal leading-7 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
+      </label>
+      <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-700">
+        <input name="agreementAccepted" type="checkbox" required className="mt-1 size-4 shrink-0 accent-blue-700" />
+        <span>
+          متن <a href={agreement.href} target="_blank" rel="noopener noreferrer" className="font-black text-blue-700 underline">قرارداد همکاری فروشندگان، نسخهٔ {agreement.version}</a> را مطالعه کرده‌ام و با ثبت درخواست، پذیرش همین نسخه را اعلام می‌کنم.
+        </span>
       </label>
       {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-800">{error}</p>}
       <button type="submit" disabled={busy} className="min-h-12 w-full rounded-xl bg-blue-700 px-5 py-3 font-black text-white transition hover:bg-blue-800 disabled:cursor-wait disabled:opacity-60">

@@ -13,7 +13,7 @@ export default async function AddressesPage() {
   if (session.user.status !== "ACTIVE") redirect("/account");
   const addresses = await getPrisma().address.findMany({
     where: { userId: session.user.id }, orderBy: { createdAt: "desc" }, take: 20,
-    select: { id: true, title: true, recipient: true, phone: true, province: true, city: true, addressLine: true, postalCode: true },
+    select: { id: true, title: true, recipient: true, phone: true, province: true, city: true, addressLine: true, buildingNumber: true, unit: true, postalCode: true },
   });
   return <main dir="rtl" className="min-h-screen bg-slate-50 px-4 py-10"><div className="mx-auto max-w-4xl">
     <Link href="/account" className="text-sm font-bold text-blue-700 hover:underline">بازگشت به حساب کاربری</Link>

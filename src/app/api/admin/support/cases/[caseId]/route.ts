@@ -22,7 +22,7 @@ const auditActions: Record<string, AdminAuditAction> = {
 export async function PATCH(request: Request, { params }: { params: Promise<{ caseId: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return errorResponse("ورود لازم است.", 401);
-  if (session.user.status !== "ACTIVE" || session.user.role !== "ADMIN") return errorResponse("دسترسی مدیر لازم است.", 403);
+  if (session.user.status !== "ACTIVE" || session.user.role !== "ADMIN" || session.user.mfaVerified !== true) return errorResponse("دسترسی مدیر لازم است.", 403);
   if (!hasSameOrigin(request)) return errorResponse("مبدأ درخواست معتبر نیست.", 403);
   if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) return errorResponse("قالب درخواست معتبر نیست.", 415);
 

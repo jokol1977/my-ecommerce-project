@@ -7,10 +7,9 @@ import {
 } from "@/lib/catalog";
 import { getPrisma } from "@/lib/prisma";
 import { getCategoryPaths } from "@/lib/category-tree";
-import {
-  isLiveCheckoutGateEnabled,
-  isVendorApprovalEnabled,
-} from "@/lib/marketplace-config";
+import { isEmailLoginEnabled } from "@/lib/auth-config";
+import { isVendorApprovalEnabled } from "@/lib/marketplace-config";
+import { isProductionCheckoutConfigured } from "@/lib/payment-config";
 import {
   toStorefrontProduct,
   type StorefrontProduct,
@@ -18,10 +17,9 @@ import {
 import Storefront from "./storefront";
 
 async function StorefrontContent() {
-  const checkoutEnabled = isLiveCheckoutGateEnabled();
+  const checkoutEnabled = isProductionCheckoutConfigured();
   const vendorApplicationsEnabled = isVendorApprovalEnabled();
-  // This release intentionally has no sign-in provider configured.
-  const accountAccessEnabled = false;
+  const accountAccessEnabled = isEmailLoginEnabled();
   const publicCatalogOnly =
     process.env.NODE_ENV === "production" &&
     !checkoutEnabled &&
@@ -42,6 +40,7 @@ async function StorefrontContent() {
     return (
       <Storefront
         initialProducts={[]}
+        categoryOptions={[{ value: "همه", label: "همه" }]}
         demoMode={false}
         initialCatalogError="پیکربندی پایگاه داده انجام نشده است."
         {...releaseFeatures}

@@ -1,0 +1,16 @@
+\set ON_ERROR_STOP on
+\getenv app_db_password APP_DB_PASSWORD
+\getenv migrator_db_password MIGRATOR_DB_PASSWORD
+SELECT format('CREATE ROLE janan_app LOGIN PASSWORD %L', :'app_db_password') \gexec
+SELECT format('CREATE ROLE janan_migrator LOGIN PASSWORD %L', :'migrator_db_password') \gexec
+GRANT CONNECT, TEMPORARY ON DATABASE janankadeh TO janan_app, janan_migrator;
+GRANT USAGE ON SCHEMA public TO janan_app;
+GRANT USAGE, CREATE ON SCHEMA public TO janan_migrator;
+ALTER DEFAULT PRIVILEGES FOR ROLE janan_migrator IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO janan_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE janan_migrator IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO janan_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE janan_migrator IN SCHEMA public
+  GRANT USAGE ON TYPES TO janan_app;
+ALTER ROLE janan_app NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+ALTER ROLE janan_migrator NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
